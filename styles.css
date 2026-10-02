@@ -100,3 +100,18 @@ dialog{border:0;padding:0;background:transparent}.sheet-dialog{width:min(720px,1
 .video-action .circle{width:46px;height:46px}
 .video-slide.video-needs-tap::before{content:"タップで再生";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;padding:10px 14px;border-radius:999px;background:rgba(0,0,0,.58);color:#fff;font-size:12px;pointer-events:none}
 .video-slide.is-playing.video-needs-tap::before{display:none}
+
+
+/* MyMelter 1.2.6 — seek / thumbnail fallback / continuous swipe */
+.media-image-error{visibility:hidden}
+.video-progress{position:absolute;left:16px;right:86px;bottom:calc(106px + var(--safe-bottom));z-index:5;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.video-seek{width:100%;height:26px;margin:0;accent-color:#fff;touch-action:pan-x;pointer-events:auto}
+.video-time{position:static!important;transform:none!important;display:flex;gap:4px;align-items:center;padding:5px 8px;border-radius:999px;background:rgba(0,0,0,.58);color:#fff;font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
+.video-overlay{bottom:calc(30px + var(--safe-bottom))}
+.video-actions{bottom:calc(70px + var(--safe-bottom))}
+.video-feed{scroll-padding:0}
+.video-slide{min-height:var(--video-vh,100dvh)!important;max-height:var(--video-vh,100dvh)!important}
+@media(max-width:390px){
+  .video-progress{left:12px;right:76px}
+  .video-time{font-size:10px;padding:4px 6px}
+}
