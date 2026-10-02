@@ -1,4 +1,4 @@
-const APP_VERSION = '1.1.4-DISCOVER';
+const APP_VERSION = '1.1.5-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -658,15 +658,8 @@ $('#fetchMode').onchange=e=>{state.settings.fetchMode=e.target.value;saveState(f
 $('#proxyUrl').oninput=e=>{state.settings.proxyUrl=e.target.value.trim();saveState(false);};
 $('#proxyKey').oninput=e=>{state.settings.proxyKey=e.target.value;saveState(false);};
 const workerTestButton=$('#workerTestBtn');
-function activateWorkerTest(e){
-  if(e){ e.preventDefault?.(); e.stopPropagation?.(); }
-  testWorkerConnection();
-  return false;
-}
-window.MyMelterWorkerTest=activateWorkerTest;
-['click','pointerup','touchend'].forEach(type=>{
-  workerTestButton.addEventListener(type,activateWorkerTest,{passive:false});
-});
+// Worker接続テストは index.html 内の自己完結スクリプトで実行。
+// app.js初期化に問題があっても診断できるよう、ここでは追加イベントを重ねない。
 $('#shortcutEnabled').onchange=e=>{state.settings.shortcutEnabled=e.target.checked;saveState(false);};
 $('#shortcutName').oninput=e=>{state.settings.shortcutName=e.target.value.trim()||'MyMelter保存';saveState(false);};
 $('#exportBtn').onclick=exportState; $('#importInput').onchange=async e=>{if(!e.target.files?.[0])return;try{await importState(e.target.files[0]);toast('バックアップを読み込みました');}catch{toast('バックアップを読み込めませんでした');}e.target.value='';};
