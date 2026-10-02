@@ -1,4 +1,4 @@
-# MyMelter 1.1 DISCOVER 導入チェック
+# MyMelter 1.2.1 DISCOVER 導入チェック
 
 - [ ] ZIPを解凍した
 - [ ] GitHub公開リポジトリを作った
@@ -15,7 +15,8 @@
 - [ ] Workerのみモードで取得テストを行い、403時に「キー不一致 / 安全ブロック / 取得先サイト拒否」が区別表示されることを確認した
 - [ ] twidouga確認時は `https://www.twidouga.net/jp/ranking_t1.php` を実ページとして試した
 - [ ] Worker側HTTP 403の場合は「Safari取り込み」を開けることを確認した
-- [ ] 初回だけ「MyMelter取込」ブックマークを作成し、対象ページからMyMelterへ戻れることを確認した
+- [ ] 「MyMelter取込」ブックマークを動画直再生対応v2へ更新した
+- [ ] 対象ページからMyMelterへ戻り、twidouga項目に直接動画URLが入り、一覧の「開く」でSafariへ出ずMyMelter内再生になることを確認した
 - [ ] 動画チャンネルで「動画」→「縦スワイプで再生」を確認した
 - [ ] 必要ならAppleショートカット保存をONにした
 - [ ] 設定からバックアップJSONを書き出した

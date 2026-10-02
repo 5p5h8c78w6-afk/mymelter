@@ -1,4 +1,4 @@
-const APP_VERSION = '1.2.0-DISCOVER';
+const APP_VERSION = '1.2.1-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -36,6 +36,7 @@ let toastTimer = null;
 let currentRankingItems = [];
 let activeCollectionItemUrl = '';
 let feedSeenUrls = new Set();
+let activeFeedItems = [];
 let browserImportTarget = '';
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -463,7 +464,7 @@ function myMelterReturnUrl(){
 }
 function buildBrowserImportBookmarklet(){
   const returnUrl=JSON.stringify(myMelterReturnUrl());
-  const code=`(function(){try{var R=${returnUrl};var A=function(u){try{return new URL(u,location.href).href}catch(e){return''}};var X=function(e){return((e&&(e.innerText||e.textContent))||'').replace(/\\s+/g,' ').trim()};var S={},I=[];var D=function(t,u,p,m,r){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;if(!u||!/^https?:/i.test(u)||S[u])return;S[u]=1;I.push({t:(t||'無題').slice(0,180),u:u,i:p||'',m:m||'',r:r||''})};var C=[].slice.call(document.querySelectorAll('article,li,section,div,[class*=rank],[class*=item],[class*=card],blockquote'));C.forEach(function(c){var z=X(c);if(z.length>900||!/第\\s*\\d+\\s*位|\\d+\\s*回保存|ランキング/.test(z))return;var a=c.querySelector('a[href*="x.com"],a[href*="twitter.com"],a[href*="video"],a[href]');var g=c.querySelector('img[src],img[data-src]');var v=c.querySelector('video[src],source[src]');var q=z.match(/第\\s*(\\d+)\\s*位/);var sv=z.match(/(\\d+)\\s*回保存/);var h=q?('第'+q[1]+'位'+(sv?' · '+sv[1]+'回保存':'')):(a?X(a):z);D(h,a&&a.href,g&&(g.currentSrc||g.src||g.getAttribute('data-src')),v&&v.src,q?q[1]:'')});[].slice.call(document.querySelectorAll('video[src],source[src]')).forEach(function(v){var c=v.closest('article,li,div,section')||v;var a=c.querySelector('a[href]');var g=c.querySelector('img');D(X(c).slice(0,180)||document.title,(a&&a.href)||v.src,g&&(g.currentSrc||g.src),v.src,'')});[].slice.call(document.querySelectorAll('a[href*="x.com/"],a[href*="twitter.com/"]')).forEach(function(a){var t=X(a);if(/シェア|share/i.test(t))return;var c=a.closest('article,li,blockquote,div')||a;var g=c.querySelector('img');D(X(c).slice(0,180)||t||'X動画',a.href,g&&(g.currentSrc||g.src),'','')});if(I.length<3){[].slice.call(document.querySelectorAll('a[href]')).slice(0,120).forEach(function(a){var h=A(a.href);var c=a.closest('article,li,[class*=item],[class*=card],div')||a;var g=c.querySelector('img');var t=X(c);if(!g&&!/video|movie|tweet|twitter|x\\.com|動画/i.test(h+' '+t))return;if(/お問い合わせ|利用規約|プライバシー|DMCA|LINEで送る/i.test(t))return;D(X(a)||t||document.title,h,g&&(g.currentSrc||g.src||g.getAttribute('data-src')),'','')})}I=I.slice(0,20);if(!I.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}var P={v:1,s:location.href,n:document.title,i:I};var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))}catch(e){alert('MyMelter取込失敗: '+e.message)}})();`;
+  const code=`(function(){try{var R=${returnUrl};var A=function(u){try{return new URL(u,location.href).href}catch(e){return''}};var X=function(e){return((e&&(e.innerText||e.textContent))||'').replace(/\\s+/g,' ').trim()};var S={},I=[];var D=function(t,u,p,m,r){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var k=m||u;if(!u||!/^https?:/i.test(u)||!k||S[k])return;S[k]=1;I.push({t:(t||'無題').slice(0,180),u:u,i:p||'',m:m||'',r:r||''})};var K=function(el){for(var n=0;n<5&&el;n++,el=el.parentElement){var z=X(el);if(z.length<700&&(/第\\s*\\d+\\s*位/.test(z)||/\\d+\\s*回保存/.test(z)))return z}return''};if(/(^|\\.)twidouga\\.net$/i.test(location.hostname)){[].slice.call(document.querySelectorAll('.gazou > .poster > a[href^="https://video.twimg.com/"],a[href^="https://video.twimg.com/"]')).forEach(function(a){var v=A(a.href),g=a.querySelector('img')||((a.parentElement||{}).querySelector&&a.parentElement.querySelector('img')),z=K(a),q=z.match(/第\\s*(\\d+)\\s*位/),sv=z.match(/(\\d+)\\s*回保存/),box=a.closest('.gazou')||a.parentElement,src=box&&box.parentElement&&box.parentElement.querySelector('a[href*="x.com/"],a[href*="twitter.com/"]'),title=q?('第'+q[1]+'位'+(sv?' · '+sv[1]+'回保存':'')):(sv?(sv[1]+'回保存'):'Twidouga動画');D(title,src&&src.href?src.href:v,g&&(g.currentSrc||g.src||g.getAttribute('data-src')),v,q?q[1]:'')})}if(!I.length){var C=[].slice.call(document.querySelectorAll('article,li,section,div,[class*=rank],[class*=item],[class*=card],blockquote'));C.forEach(function(c){var z=X(c);if(z.length>900||!/第\\s*\\d+\\s*位|\\d+\\s*回保存|ランキング/.test(z))return;var a=c.querySelector('a[href*="x.com"],a[href*="twitter.com"],a[href*="video"],a[href]');var g=c.querySelector('img[src],img[data-src]');var v=c.querySelector('video[src],source[src]');var q=z.match(/第\\s*(\\d+)\\s*位/);var sv=z.match(/(\\d+)\\s*回保存/);var h=q?('第'+q[1]+'位'+(sv?' · '+sv[1]+'回保存':'')):(a?X(a):z);D(h,a&&a.href,g&&(g.currentSrc||g.src||g.getAttribute('data-src')),v&&v.src,q?q[1]:'')});[].slice.call(document.querySelectorAll('video[src],source[src]')).forEach(function(v){var c=v.closest('article,li,div,section')||v;var a=c.querySelector('a[href]');var g=c.querySelector('img');D(X(c).slice(0,180)||document.title,(a&&a.href)||v.src,g&&(g.currentSrc||g.src),v.src,'')});[].slice.call(document.querySelectorAll('a[href*="x.com/"],a[href*="twitter.com/"]')).forEach(function(a){var t=X(a);if(/シェア|share/i.test(t))return;var c=a.closest('article,li,blockquote,div')||a;var g=c.querySelector('img');D(X(c).slice(0,180)||t||'X動画',a.href,g&&(g.currentSrc||g.src),'','')})}I=I.slice(0,30);if(!I.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}var P={v:2,s:location.href,n:document.title,i:I};var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))}catch(e){alert('MyMelter取込失敗: '+e.message)}})();`;
   return 'javascript:'+code;
 }
 function openBrowserImportSetup(target=''){
@@ -471,7 +472,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='初回だけブックマークを作成してください。作成後は対象ページで「MyMelter取込」を実行します。';
+  $('#browserImportStatus').textContent='動画直再生対応 v2。既存の「MyMelter取込」を使っている場合も、URLをこの最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -502,7 +503,7 @@ function consumeBrowserImportHash(){
       if(!url&&!videoUrl)return null;
       return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type:videoUrl?'video':image?'image':'article',browserRank:String(x?.r||'')};
     }).filter(Boolean);
-    const items=uniqueBy(incoming,x=>x.url).slice(0,80); if(!items.length) throw new Error('取り込める項目がありません');
+    const items=uniqueBy(incoming,x=>x.videoUrl||x.url).slice(0,80); if(!items.length) throw new Error('取り込める項目がありません');
     let channel=state.channels.find(c=>c.source==='browser'&&c.browserSourceUrl===source);
     if(channel){
       channel.name=title; channel.url=source; channel.snapshotItems=items; channel.itemCount=items.length; channel.updatedAt=Date.now();
@@ -512,7 +513,7 @@ function consumeBrowserImportHash(){
       items.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;}); channel.snapshotItems=items; state.channels.unshift(channel);
     }
     rememberItems(items); state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('Safariから'+items.length+'件取り込みました');
+    toast('Safariから'+items.length+'件取り込みました'+(Number(payload?.v||0)<2?'（取込コード更新推奨）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -610,7 +611,7 @@ function setReaderMode(mode,render=true){ activeReaderMode=mode; $$('#readerMode
 function renderReader(){
   const root=$('#readerContent'); if(!activeItems.length){root.innerHTML=`<div class="empty-card">表示できる項目がありません。</div>`;return;}
   if(activeReaderMode==='video'){
-    const vids=activeItems.filter(x=>x.videoUrl||x.type==='video');
+    const vids=activeItems.filter(x=>x.videoUrl);
     root.innerHTML=vids.length?`<div class="empty-card"><strong>${vids.length}件の動画があります。</strong><br>「縦スワイプで再生」を押すと、上スワイプで次の動画へ移動できます。<br><br><button class="primary" id="launchVideoFeedBtn">縦スワイプで再生</button></div>`:`<div class="empty-card">この一覧から直接再生できる動画URLは見つかりませんでした。</div>`; return;
   }
   if(activeReaderMode==='media'){
@@ -637,7 +638,16 @@ function saveItem(item){
   const entry={...(prev||{}),...(cat||{}),...item,savedAt:Date.now(),viewCount:Math.max(Number(item.viewCount||0),Number(cat?.viewCount||0),Number(prev?.viewCount||0))};
   state.saved=[entry,...state.saved.filter(x=>x.url!==item.url)].slice(0,500); if(!cat)rememberItems([entry]); saveState(); toast('保存済みに追加しました');
 }
-function openItem(item){ if(!item?.url)return; recordHistory(item); window.open(item.url,'_blank','noopener'); }
+function openItem(item){
+  if(!item)return;
+  if(item.videoUrl){
+    recordHistory(item,false);
+    openVideoFeedItems([item],item.channelName||'動画');
+    return;
+  }
+  if(!item.url)return;
+  recordHistory(item); window.open(item.url,'_blank','noopener');
+}
 
 async function quickSave(item){
   const target=item.videoUrl||item.image||item.url; if(!target)return;
@@ -651,22 +661,29 @@ async function quickSave(item){
   const a=document.createElement('a');a.href=target;a.target='_blank';a.rel='noopener';a.download='';a.click(); toast('メディアを開きました。iPhoneでは共有から保存できます');
 }
 
-function openVideoFeed(){
-  const vids=activeItems.filter(x=>x.videoUrl||x.type==='video'); if(!vids.length){toast('直接再生できる動画がありません');return;}
-  feedSeenUrls=new Set(); $('#videoFeedTitle').textContent=activeChannel?.name||'動画';
-  $('#videoFeed').innerHTML=vids.map((x,i)=>videoSlideHTML(x,i)).join(''); $('#videoFeedDialog').showModal();
+function openVideoFeedItems(items,title='動画'){
+  const vids=(items||[]).filter(x=>x?.videoUrl);
+  if(!vids.length){toast('直接再生できる動画URLがありません');return;}
+  activeFeedItems=vids; feedSeenUrls=new Set(); $('#videoFeedTitle').textContent=title||'動画';
+  $('#videoFeed').innerHTML=vids.map((x,i)=>videoSlideHTML(x,i)).join('');
+  if(!$('#videoFeedDialog').open) $('#videoFeedDialog').showModal();
   setupVideoAutoplay();
+}
+function openVideoFeed(){
+  const vids=activeItems.filter(x=>x.videoUrl);
+  openVideoFeedItems(vids,activeChannel?.name||'動画');
 }
 function videoSlideHTML(x,i){
   const src=x.videoUrl||''; const poster=x.image||''; const saved=isSavedUrl(x.url);
-  const media=src?`<video src="${esc(src)}" ${poster?`poster="${esc(poster)}"`:''} controls playsinline muted loop preload="metadata"></video>`:`<div class="video-fallback"><div><strong>この動画はページ側で再生します</strong><br><br><button class="primary" data-feed-open="${i}">元ページを開く</button></div></div>`;
-  return `<section class="video-slide" data-feed-index="${i}">${media}<div class="video-overlay"><strong>${esc(x.title||'動画')}</strong><small>${esc(x.channelName||domainOf(x.url))}</small></div><div class="video-actions"><button class="video-action" data-feed-quick-save="${i}"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="${i}"><span class="circle">${saved?'♥':'♡'}</span><span>${saved?'保存済み':'保存'}</span></button><button class="video-action" data-feed-open="${i}"><span class="circle">↗</span><span>元ページ</span></button></div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>`;
+  const media=src?`<video src="${esc(src)}" ${poster?`poster="${esc(poster)}"`:''} controls playsinline muted loop preload="metadata"></video>`:`<div class="video-fallback"><div><strong>直接再生URLがありません</strong><br><br><button class="primary" data-feed-source-open="${i}">元ページを開く</button></div></div>`;
+  return `<section class="video-slide" data-feed-index="${i}">${media}<div class="video-overlay"><strong>${esc(x.title||'動画')}</strong><small>${esc(x.channelName||domainOf(x.url))}</small></div><div class="video-actions"><button class="video-action" data-feed-quick-save="${i}"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="${i}"><span class="circle">${saved?'♥':'♡'}</span><span>${saved?'保存済み':'保存'}</span></button>${x.url&&x.url!==x.videoUrl?`<button class="video-action" data-feed-source-open="${i}"><span class="circle">↗</span><span>元ページ</span></button>`:''}</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>`;
 }
 function setupVideoAutoplay(){
-  const feed=$('#videoFeed'); const vids=activeItems.filter(x=>x.videoUrl||x.type==='video'); const slides=$('.video-slide',feed);
+  const feed=$('#videoFeed'); const vids=activeFeedItems; const slides=$$('.video-slide',feed);
   slides.forEach(slide=>{
     const idx=Number(slide.dataset.feedIndex); const item=vids[idx]; const v=slide.querySelector('video'); if(!v||!item)return; const key=item.videoUrl||item.url;
     v.addEventListener('loadedmetadata',()=>{const pos=Number(state.positions[key]||0);if(pos>1&&Number.isFinite(v.duration)&&pos<v.duration-2){try{v.currentTime=pos;}catch{}}},{once:true});
+    v.addEventListener('error',()=>{slide.classList.add('video-load-error');toast('動画を再生できません。取込コードを最新版に更新してください');},{once:true});
     const keep=()=>{if(!Number.isFinite(v.duration))return; if(v.currentTime>1&&v.currentTime<v.duration-2)state.positions[key]=Math.floor(v.currentTime);else delete state.positions[key];saveState(false);};
     v.addEventListener('pause',keep); v.addEventListener('ended',()=>{delete state.positions[key];saveState(false);});
   });
@@ -678,7 +695,6 @@ function setupVideoAutoplay(){
     }else v?.pause();
   }),{root:feed,threshold:[.72]}); slides.forEach(slide=>obs.observe(slide));
 }
-
 function openSearchResults(q){
   const needle=q.trim().toLowerCase(); if(!needle)return;
   const channels=state.channels.filter(c=>`${c.name} ${c.url}`.toLowerCase().includes(needle)).slice(0,20);
@@ -722,7 +738,7 @@ $('#readerEditBtn').onclick=()=>{if(activeChannel){$('#readerDialog').close();op
 $$('#readerModeTabs button').forEach(b=>b.onclick=()=>setReaderMode(b.dataset.readerMode));
 $('#readerSearchBtn').onclick=()=>activeChannel&&openChannel(activeChannel,$('#readerSearch').value.trim());
 $('#readerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#readerSearchBtn').click();}});
-$('#videoFeedClose').onclick=()=>{$$('#videoFeed video').forEach(v=>v.pause());$('#videoFeedDialog').close();};
+$('#videoFeedClose').onclick=()=>{$('#videoFeed video').forEach(v=>v.pause());activeFeedItems=[];$('#videoFeedDialog').close();};
 
 // Global search
 $('#globalSearch').addEventListener('input',e=>$('#clearGlobalSearch').hidden=!e.target.value);
@@ -766,9 +782,9 @@ document.addEventListener('click',async e=>{
   const activeQuick=e.target.closest('[data-active-quick-save]'); if(activeQuick){await quickSave(activeItems[Number(activeQuick.dataset.activeQuickSave)]);return;}
   const launch=e.target.closest('#launchVideoFeedBtn'); if(launch){openVideoFeed();return;}
   const feedSlide=e.target.closest('[data-feed-index]');
-  const feedQuick=e.target.closest('[data-feed-quick-save]'); if(feedQuick&&feedSlide){const vids=activeItems.filter(x=>x.videoUrl||x.type==='video');await quickSave(vids[Number(feedQuick.dataset.feedQuickSave)]);return;}
-  const feedSave=e.target.closest('[data-feed-save]'); if(feedSave&&feedSlide){const vids=activeItems.filter(x=>x.videoUrl||x.type==='video');saveItem(vids[Number(feedSave.dataset.feedSave)]);return;}
-  const feedOpen=e.target.closest('[data-feed-open]'); if(feedOpen){const vids=activeItems.filter(x=>x.videoUrl||x.type==='video');openItem(vids[Number(feedOpen.dataset.feedOpen)]);return;}
+  const feedQuick=e.target.closest('[data-feed-quick-save]'); if(feedQuick&&feedSlide){await quickSave(activeFeedItems[Number(feedQuick.dataset.feedQuickSave)]);return;}
+  const feedSave=e.target.closest('[data-feed-save]'); if(feedSave&&feedSlide){saveItem(activeFeedItems[Number(feedSave.dataset.feedSave)]);return;}
+  const feedSource=e.target.closest('[data-feed-source-open]'); if(feedSource){const item=activeFeedItems[Number(feedSource.dataset.feedSourceOpen)];if(item?.url)window.open(item.url,'_blank','noopener');return;}
   const lib=e.target.closest('[data-open-library]'); if(lib){const [kind,idxStr]=lib.dataset.openLibrary.split(':');const arr=kind==='saved'?state.saved:state.history;openItem(arr[Number(idxStr)]);return;}
   const rem=e.target.closest('[data-remove-saved]'); if(rem){removeSavedAt(Number(rem.dataset.removeSaved));return;}
   const saveH=e.target.closest('[data-save-history]'); if(saveH){saveItem(state.history[Number(saveH.dataset.saveHistory)]);return;}

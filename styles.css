@@ -71,3 +71,6 @@ dialog{border:0;padding:0;background:transparent}.sheet-dialog{width:min(720px,1
 .browser-import-steps b{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--blue);color:#fff;font-size:12px}
 .browser-import-steps span{font-size:12px;line-height:1.55;color:#536b88}
 .bookmarklet-code{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;background:#f7f9fc;color:#3f536c;font-size:10px;line-height:1.4;resize:vertical}
+
+/* MyMelter 1.2.1 — direct video playback diagnostics */
+.video-slide.video-load-error::after{content:"動画を読み込めません。MyMelter取込を最新版へ更新してください";position:absolute;left:18px;right:18px;top:50%;transform:translateY(-50%);padding:14px;border-radius:14px;background:rgba(14,25,40,.86);color:#fff;text-align:center;font-size:13px;line-height:1.5;pointer-events:none}
