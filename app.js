@@ -1285,6 +1285,7 @@ $('#installBtn').onclick=async()=>{if(deferredInstallPrompt){deferredInstallProm
 
 // Delegated events
 document.addEventListener('click',async e=>{
+  if(e.target.closest?.('#videoFeedDialog .video-actions,#videoFeedDialog .video-progress,#videoFeedDialog .video-feed-top'))showFeedControls(true);
   const pressAction=actionablePressButton(e.target);
   if(pressAction&&Number(pressAction.dataset.suppressClickUntil||0)>Date.now()){e.preventDefault();return;}
   const browserImport=e.target.closest('[data-browser-import-target]'); if(browserImport){openBrowserImportSetup(browserImport.dataset.browserImportTarget||'');return;}
