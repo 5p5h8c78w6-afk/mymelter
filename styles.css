@@ -74,3 +74,12 @@ dialog{border:0;padding:0;background:transparent}.sheet-dialog{width:min(720px,1
 
 /* MyMelter 1.2.1 — direct video playback diagnostics */
 .video-slide.video-load-error::after{content:"動画を読み込めません。MyMelter取込を最新版へ更新してください";position:absolute;left:18px;right:18px;top:50%;transform:translateY(-50%);padding:14px;border-radius:14px;background:rgba(14,25,40,.86);color:#fff;text-align:center;font-size:13px;line-height:1.5;pointer-events:none}
+
+/* MyMelter 1.2.2 — iPhone video playback / close hardening */
+.video-feed-top{z-index:1000!important;pointer-events:none}
+.video-close{position:fixed!important;left:16px;top:calc(10px + var(--safe-top));z-index:1002!important;pointer-events:auto!important;touch-action:manipulation;-webkit-appearance:none;appearance:none}
+.video-feed-top strong{pointer-events:none}
+.video-slide video{pointer-events:none}
+.video-tap-toggle{position:absolute;inset:0;z-index:2;border:0;background:transparent;padding:0;touch-action:manipulation}
+.video-overlay{z-index:3;pointer-events:none}.video-actions{z-index:4}.swipe-hint{z-index:3;pointer-events:none}
+.video-actions button{pointer-events:auto}

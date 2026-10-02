@@ -10,7 +10,7 @@
   <meta name="format-detection" content="telephone=no" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icons/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=1.2.1" />
+  <link rel="stylesheet" href="./styles.css?v=1.2.2" />
   <script>
     window.MyMelterInlineWorkerTest = async function(ev){
       try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){}
@@ -207,7 +207,7 @@
 
       <div class="settings-group">
         <h3>Safari取り込み</h3>
-        <p class="help">Worker経由を403で拒否するサイトは、Safariで実際に表示したページから一覧をMyMelterへ戻せます。初回だけ「MyMelter取込」ブックマークを準備します。既に作成済みの場合も、動画直再生対応v2へ1回更新してください。</p>
+        <p class="help">Worker経由を403で拒否するサイトは、Safariで実際に表示したページから一覧をMyMelterへ戻せます。初回だけ「MyMelter取込」ブックマークを準備します。既に作成済みの場合も、動画抽出強化v3へ1回更新してください。</p>
         <div class="button-row">
           <button id="openBrowserImportSetupBtn" class="secondary" type="button">取込ブックマークを準備</button>
         </div>
@@ -230,7 +230,7 @@
 
       <div class="settings-group">
         <h3>このアプリ</h3>
-        <p class="help">MyMelter PWA 1.2.1 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
+        <p class="help">MyMelter PWA 1.2.2 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
       </div>
     </section>
   </main>
@@ -366,7 +366,7 @@
 
   <dialog id="videoFeedDialog" class="video-dialog">
     <div class="video-feed-shell">
-      <div class="video-feed-top"><button id="videoFeedClose" class="video-close">×</button><strong id="videoFeedTitle">動画</strong><span></span></div>
+      <div class="video-feed-top"><button id="videoFeedClose" class="video-close" type="button" onclick="if(window.MyMelterCloseVideoFeed){window.MyMelterCloseVideoFeed();}else{document.querySelectorAll('#videoFeed video').forEach(function(v){try{v.pause();}catch(e){}});var d=document.getElementById('videoFeedDialog');if(d&&d.open)d.close();}return false;">×</button><strong id="videoFeedTitle">動画</strong><span></span></div>
       <div id="videoFeed" class="video-feed"></div>
     </div>
   </dialog>
@@ -379,6 +379,6 @@
     </div>
   </dialog>
 
-  <script src="./app.js?v=1.2.1"></script>
+  <script src="./app.js?v=1.2.2"></script>
 </body>
 </html>
