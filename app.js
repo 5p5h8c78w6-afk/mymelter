@@ -45,6 +45,8 @@ let feedCurrentIndex = 0;
 let feedRoutePrefs = new Map();
 let feedActivationSerial = 0;
 let feedHotOrder = [];
+let pendingMediaShare = null;
+let pressCandidate = null;
 let browserImportTarget = '';
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -776,11 +778,11 @@ function renderReader(){
 }
 function contentItemHTML(x,i){
   const th=x.image?`<img class="content-thumb" ${imageSourceAttrs(x.image)} alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="content-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
-  return `<article class="content-card">${th}<div class="content-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(typeLabel(mediaKind(x)))} · ${esc(domainOf(x.url))}</small><div class="content-actions"><button class="open-btn" data-active-open="${i}">開く</button><button class="save-btn" data-active-save="${i}">♡ 保存済み</button>${x.videoUrl||x.image?`<button class="save-btn" data-active-quick-save="${i}">⇩ 端末保存</button>`:''}</div></div></article>`;
+  return `<article class="content-card">${th}<div class="content-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(typeLabel(mediaKind(x)))} · ${esc(domainOf(x.url))}</small><div class="content-actions"><button class="open-btn" data-active-open="${i}">開く</button><button class="save-btn" data-active-save="${i}">${isSavedUrl(x.url)?'♥ 保存済み':'♡ 保存'}</button>${x.videoUrl||x.image?`<button class="save-btn" data-active-quick-save="${i}">⇩ 端末保存</button>`:''}</div></div></article>`;
 }
 function gridItemHTML(x,i){
   const media=x.image?`<img ${imageSourceAttrs(x.image)} alt="" loading="lazy" referrerpolicy="no-referrer">`:x.videoUrl?`<video src="${esc(x.videoUrl)}" muted playsinline preload="metadata"></video>`:`<div class="content-placeholder" style="width:100%;aspect-ratio:1/1">◇</div>`;
-  return `<article class="grid-card">${media}<div class="grid-copy"><strong>${esc(x.title||'無題')}</strong><div class="grid-actions"><button data-active-open="${i}">開く</button><button data-active-save="${i}">保存</button><button data-active-quick-save="${i}">端末へ</button></div></div></article>`;
+  return `<article class="grid-card">${media}<div class="grid-copy"><strong>${esc(x.title||'無題')}</strong><div class="grid-actions"><button data-active-open="${i}">開く</button><button data-active-save="${i}">${isSavedUrl(x.url)?'♥ 保存済み':'♡ 保存'}</button><button data-active-quick-save="${i}">端末へ</button></div></div></article>`;
 }
 function recordHistory(item,render=true){
   if(!item?.url)return;
@@ -792,6 +794,72 @@ function saveItem(item){
   const entry={...(prev||{}),...(cat||{}),...item,savedAt:Date.now(),viewCount:Math.max(Number(item.viewCount||0),Number(cat?.viewCount||0),Number(prev?.viewCount||0))};
   state.saved=[entry,...state.saved.filter(x=>x.url!==item.url)].slice(0,500); if(!cat)rememberItems([entry]); saveState(); toast('保存済みに追加しました');
 }
+function toggleSavedItem(item,button=null){
+  if(!item?.url)return false;
+  const exists=isSavedUrl(item.url);
+  if(exists){
+    state.saved=state.saved.filter(x=>x.url!==item.url);saveState(false);toast('保存済みから外しました');
+  }else{
+    saveItem(item);
+  }
+  const nowSaved=!exists;
+  if(button){
+    const circle=button.querySelector('.circle');
+    const label=button.querySelector('.video-action-label')||button.querySelector('span:last-child');
+    if(circle)circle.textContent=nowSaved?'♥':'♡';
+    if(label)label.textContent=nowSaved?'保存済み':'保存';
+    if(button.matches('.save-btn,[data-active-save]'))button.textContent=nowSaved?'♥ 保存済み':'♡ 保存';
+  }
+  return nowSaved;
+}
+function ensureMediaSaveDialog(){
+  let d=document.getElementById('mediaSaveDialog'); if(d)return d;
+  d=document.createElement('dialog');d.id='mediaSaveDialog';d.className='sheet-dialog media-save-dialog';
+  d.innerHTML='<div class="sheet media-save-sheet"><div class="sheet-handle"></div><div class="sheet-head"><div><p class="eyebrow">DEVICE SAVE</p><h2>端末へ保存</h2></div><button type="button" class="round-btn" data-media-save-close>×</button></div><div class="media-save-preview" data-media-save-preview></div><p class="sheet-lead" data-media-save-status>準備しています…</p><div class="button-row"><button type="button" class="primary" data-media-share disabled>共有して保存</button><button type="button" class="secondary" data-media-save-close>閉じる</button></div></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll('[data-media-save-close]').forEach(b=>b.onclick=closeMediaSaveDialog);
+  d.querySelector('[data-media-share]').onclick=sharePreparedMedia;
+  return d;
+}
+function closeMediaSaveDialog(){
+  const d=document.getElementById('mediaSaveDialog'); if(d?.open)d.close();
+  if(pendingMediaShare?.objectUrl)URL.revokeObjectURL(pendingMediaShare.objectUrl);
+  pendingMediaShare=null;
+}
+async function sharePreparedMedia(){
+  const d=ensureMediaSaveDialog(),btn=d.querySelector('[data-media-share]'),status=d.querySelector('[data-media-save-status]');
+  if(!pendingMediaShare?.file){status.textContent='まだ準備中です。';return;}
+  const file=pendingMediaShare.file;
+  try{
+    if(navigator.share&&navigator.canShare?.({files:[file]})){
+      await navigator.share({title:pendingMediaShare.title||'MyMelter',files:[file]});closeMediaSaveDialog();return;
+    }
+  }catch(e){if(e?.name==='AbortError')return;}
+  if(pendingMediaShare.objectUrl){
+    const a=document.createElement('a');a.href=pendingMediaShare.objectUrl;a.download=file.name;a.click();
+    status.textContent='ダウンロードを開始しました。';
+  }else status.textContent='この端末ではファイル共有を利用できません。';
+}
+async function prepareDeviceSave(item){
+  const target=item?.videoUrl||item?.image||item?.url; if(!target)return;
+  if(state.settings.shortcutEnabled){
+    const name=state.settings.shortcutName||'MyMelter保存';
+    window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(target)}`;return;
+  }
+  const d=ensureMediaSaveDialog(),status=d.querySelector('[data-media-save-status]'),share=d.querySelector('[data-media-share]'),preview=d.querySelector('[data-media-save-preview]');
+  status.textContent='メディアファイルを準備中…';share.disabled=true;preview.innerHTML=item?.image?`<img ${imageSourceAttrs(item.image)} alt="">`:'<div class="media-save-placeholder">動画を準備しています</div>';
+  if(!d.open)d.showModal();
+  try{
+    const blob=await fetchMediaBlob(target),ext=mediaFileExtension(target,blob.type),name=`MyMelter_${Date.now()}.${ext}`,file=new File([blob],name,{type:blob.type||'application/octet-stream'});
+    const objectUrl=URL.createObjectURL(blob);
+    pendingMediaShare={file,objectUrl,title:item.title||'MyMelter'};
+    status.textContent='準備完了。「共有して保存」を押してください。';share.disabled=false;
+    if(!item.image&&blob.type.startsWith('video/'))preview.innerHTML=`<video src="${esc(objectUrl)}" muted playsinline preload="metadata"></video>`;
+  }catch(e){
+    console.warn('device save prepare failed',e);status.textContent='ファイル準備に失敗しました。Worker接続と動画URLを確認してください。';share.disabled=true;
+  }
+}
+
 function openActiveItem(index){
   const item=activeItems[Number(index)];
   if(!item)return;
@@ -837,28 +905,7 @@ async function fetchMediaBlob(target){
   }
   throw lastErr||new Error('media fetch failed');
 }
-async function quickSave(item){
-  const target=item.videoUrl||item.image||item.url; if(!target)return;
-  if(state.settings.shortcutEnabled){
-    const name=state.settings.shortcutName||'MyMelter保存'; const u=`shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(target)}`;
-    toast('保存ショートカットを起動します'); window.location.href=u; return;
-  }
-  if(item.videoUrl||item.image){
-    try{
-      toast('メディアファイルを準備中…');
-      const blob=await fetchMediaBlob(target),ext=mediaFileExtension(target,blob.type),name=`MyMelter_${Date.now()}.${ext}`;
-      const file=new File([blob],name,{type:blob.type||'application/octet-stream'});
-      if(navigator.share&&navigator.canShare?.({files:[file]})){
-        await navigator.share({title:item.title||'MyMelter',files:[file]}); return;
-      }
-      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);return;
-    }catch(e){ if(e?.name==='AbortError')return; console.warn('file save fallback',e); }
-  }
-  try{
-    if(navigator.share){ await navigator.share({title:item.title||'MyMelter',url:target}); return; }
-  }catch(e){ if(e?.name==='AbortError')return; }
-  const a=document.createElement('a');a.href=target;a.target='_blank';a.rel='noopener';a.download='';a.click(); toast('メディアを開きました。共有から保存してください');
-}
+async function quickSave(item){return prepareDeviceSave(item);}
 
 function mediaProxyUrl(src){
   const direct=normalizeUrl(src); if(!direct)return '';
@@ -919,6 +966,7 @@ function feedSlide(i){return document.querySelector('.video-slide[data-feed-inde
 function releaseFeedVideoElement(v,final=false){
   if(!v)return;
   try{v.pause();}catch{}
+  clearTimeout(v._routeTimer);
   v.dataset.feedState='released';
   v.dataset.loadSerial=String((Number(v.dataset.loadSerial)||0)+1);
   v.removeAttribute('src');
@@ -938,10 +986,19 @@ function loadFeedSource(v,src,route,stateName='active'){
   v.dataset.feedState=stateName;
   v.dataset.currentRoute=route;
   v.dataset.expectedSrc=src;
-  v.preload=stateName==='active'?'auto':'metadata';
+  v.preload='auto';
   v.muted=!feedSoundOn;
+  clearTimeout(v._routeTimer);
   v.src=src;
   try{v.load();}catch{}
+  if(stateName==='active'&&route==='direct'&&v.dataset.proxySrc){
+    const serial=v.dataset.loadSerial;
+    v._routeTimer=setTimeout(()=>{
+      if(v.dataset.loadSerial!==serial||v.dataset.feedState!=='active'||v.readyState>=2||v.dataset.currentRoute!=='direct')return;
+      v.dataset.proxyTried='1';feedRoutePrefs.set(v.dataset.directSrc||'','proxy');
+      loadFeedSource(v,v.dataset.proxySrc,'proxy','active');
+    },1700);
+  }
 }
 function preferredFeedSource(v){
   const direct=v?.dataset.directSrc||'',proxy=v?.dataset.proxySrc||'';
@@ -1020,14 +1077,14 @@ function videoSlideHTML(x,i){
   const proxyAttr=proxy&&proxy!==direct?' data-proxy-src="'+esc(proxy)+'"':'';
   const media=direct?'<video data-direct-src="'+esc(direct)+'"'+proxyAttr+(poster?' poster="'+esc(poster)+'"':'')+' data-feed-video="'+i+'" playsinline loop preload="none"></video>':'<div class="video-fallback"><div><strong>直接再生URLがありません</strong></div></div>';
   const source=x.deepDive?('深掘り · '+(x.deepSource||'関連')):(x.channelName||domainOf(x.url));
-  return '<section class="video-slide" data-feed-index="'+i+'">'+media+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong>この動画を再生できません</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><canvas width="160" height="90"></canvas><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><input class="video-seek" data-feed-seek="'+i+'" type="range" min="0" max="0" step="0.1" value="0"><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
+  return '<section class="video-slide" data-feed-index="'+i+'">'+media+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong>この動画を再生できません</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><video class="seek-preview-video" muted playsinline preload="metadata"></video><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><div class="video-scrubber" data-feed-scrub="'+i+'" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="video-scrub-track"><div class="video-scrub-fill"></div><div class="video-scrub-thumb"></div></div></div><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
 }
 function setupVideoAutoplay(startIndex=0){
   const feed=$('#videoFeed'),vids=activeFeedItems,slides=$$('.video-slide',feed);
   slides.forEach(slide=>{
     const i=Number(slide.dataset.feedIndex),item=vids[i],v=slide.querySelector('video');if(!v||!item)return;
-    const key=item.videoUrl||item.url,cur=slide.querySelector('[data-feed-current]'),dur=slide.querySelector('[data-feed-duration]'),seek=slide.querySelector('[data-feed-seek]');
-    const tick=()=>{if(cur)cur.textContent=mediaTime(v.currentTime);if(dur&&Number.isFinite(v.duration))dur.textContent=mediaTime(v.duration);if(seek&&Number.isFinite(v.duration)){seek.max=String(v.duration);if(!seek.dataset.dragging)seek.value=String(v.currentTime||0);const pct=v.duration?Math.max(0,Math.min(100,(Number(seek.value)||0)/v.duration*100)):0;seek.style.setProperty('--seek-pct',pct+'%');}};
+    const key=item.videoUrl||item.url,cur=slide.querySelector('[data-feed-current]'),dur=slide.querySelector('[data-feed-duration]'),scrub=slide.querySelector('[data-feed-scrub]');
+    const tick=()=>{if(cur)cur.textContent=mediaTime(v.currentTime);if(dur&&Number.isFinite(v.duration))dur.textContent=mediaTime(v.duration);if(scrub&&Number.isFinite(v.duration)&&scrub.dataset.dragging!=='1')updateScrubberVisual(scrub,v.currentTime,v.duration);};
     v.addEventListener('loadedmetadata',()=>{
       if(v.dataset.feedState==='released')return;
       try{v.currentTime=0;}catch{}
@@ -1039,7 +1096,7 @@ function setupVideoAutoplay(startIndex=0){
       const route=v.dataset.currentRoute||'direct',direct=v.dataset.directSrc||'';
       if(direct)feedRoutePrefs.set(direct,route);
     });
-    v.addEventListener('waiting',()=>{const seek=slide.querySelector('[data-feed-seek]');if(v.dataset.feedState==='active'&&seek?.dataset.dragging!=='1')slide.classList.add('video-buffering');});
+    v.addEventListener('waiting',()=>{const scrub=slide.querySelector('[data-feed-scrub]');if(v.dataset.feedState==='active'&&scrub?.dataset.dragging!=='1')slide.classList.add('video-buffering');});
     v.addEventListener('playing',()=>{slide.classList.remove('video-buffering','video-needs-tap');slide.classList.add('is-playing');});
     v.addEventListener('timeupdate',tick);
     v.addEventListener('pause',()=>slide.classList.remove('is-playing'));
