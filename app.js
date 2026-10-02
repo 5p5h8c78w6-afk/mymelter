@@ -1,4 +1,4 @@
-const APP_VERSION = '1.3.7-DISCOVER';
+const APP_VERSION = '1.3.8-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -815,6 +815,35 @@ function toggleSavedItem(item,button=null){
   }
   return nowSaved;
 }
+function deviceSaveFilename(item,target){
+  const ext=mediaFileExtension(target,item?.type||'')||'mp4';
+  const rank=item?.browserRank?('_rank'+item.browserRank):'';
+  return 'MyMelter'+rank+'_'+Date.now()+'.'+ext;
+}
+function streamingDownloadUrl(target,filename=''){
+  const direct=normalizeUrl(target); if(!direct)return '';
+  const base=(state.settings.proxyUrl||'').trim().replace(/\/+$/,'');
+  if(!base)return direct;
+  try{
+    const u=new URL(base);
+    u.searchParams.set('url',direct);
+    u.searchParams.set('media','1');
+    u.searchParams.set('download','1');
+    if(filename)u.searchParams.set('filename',filename);
+    if(state.settings.proxyKey)u.searchParams.set('key',state.settings.proxyKey);
+    return u.href;
+  }catch{return direct;}
+}
+function openStreamingDeviceSave(item){
+  const target=item?.videoUrl||item?.image||item?.url; if(!target)return;
+  const filename=deviceSaveFilename(item,target);
+  const saveUrl=streamingDownloadUrl(target,filename);
+  if(!saveUrl)return;
+  const win=window.open(saveUrl,'_blank');
+  if(win){try{win.opener=null;}catch{};toast(state.settings.proxyUrl?'端末保存を開始しました':'Safariで動画を開きました。共有から保存してください');return;}
+  try{window.location.href=saveUrl;}catch{toast('保存用URLを開けませんでした');}
+}
+
 function ensureMediaSaveDialog(){
   let d=document.getElementById('mediaSaveDialog'); if(d)return d;
   d=document.createElement('dialog');d.id='mediaSaveDialog';d.className='sheet-dialog media-save-dialog';
@@ -849,17 +878,21 @@ async function prepareDeviceSave(item){
     const name=state.settings.shortcutName||'MyMelter保存';
     window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(target)}`;return;
   }
+  if(item?.videoUrl){
+    openStreamingDeviceSave(item);
+    return;
+  }
   const d=ensureMediaSaveDialog(),status=d.querySelector('[data-media-save-status]'),share=d.querySelector('[data-media-share]'),preview=d.querySelector('[data-media-save-preview]');
-  status.textContent='メディアファイルを準備中…';share.disabled=true;preview.innerHTML=item?.image?`<img ${imageSourceAttrs(item.image)} alt="">`:'<div class="media-save-placeholder">動画を準備しています</div>';
+  status.textContent='画像を準備中…';share.disabled=true;preview.innerHTML=item?.image?`<img ${imageSourceAttrs(item.image)} alt="">`:'<div class="media-save-placeholder">画像を準備しています</div>';
   if(!d.open)d.showModal();
   try{
-    const blob=await fetchMediaBlob(target),ext=mediaFileExtension(target,blob.type),name=`MyMelter_${Date.now()}.${ext}`,file=new File([blob],name,{type:blob.type||'application/octet-stream'});
+    const blob=await fetchMediaBlob(target,15000),ext=mediaFileExtension(target,blob.type),name=`MyMelter_${Date.now()}.${ext}`,file=new File([blob],name,{type:blob.type||'application/octet-stream'});
     const objectUrl=URL.createObjectURL(blob);
     pendingMediaShare={file,objectUrl,title:item.title||'MyMelter'};
     status.textContent='準備完了。「共有して保存」を押してください。';share.disabled=false;
-    if(!item.image&&blob.type.startsWith('video/'))preview.innerHTML=`<video src="${esc(objectUrl)}" muted playsinline preload="metadata"></video>`;
   }catch(e){
-    console.warn('device save prepare failed',e);status.textContent='ファイル準備に失敗しました。Worker接続と動画URLを確認してください。';share.disabled=true;
+    console.warn('image save prepare failed',e);status.textContent='画像の準備に失敗しました。Safariで開きます。';share.disabled=true;
+    setTimeout(()=>openStreamingDeviceSave(item),300);
   }
 }
 
@@ -896,15 +929,17 @@ function mediaFileExtension(url,mime=''){
   if(m.includes('image/jpeg'))return 'jpg'; if(m.includes('image/png'))return 'png'; if(m.includes('image/webp'))return 'webp';
   const hit=String(url||'').match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i); return hit?hit[1].toLowerCase():'bin';
 }
-async function fetchMediaBlob(target){
+async function fetchMediaBlob(target,timeoutMs=15000){
   const proxied=mediaProxyUrl(target),sources=uniqueBy([proxied,target],x=>x);
   let lastErr=null;
   for(const src of sources){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
     try{
-      const r=await fetch(src,{credentials:'omit',cache:'no-store'});
+      const r=await fetch(src,{credentials:'omit',cache:'no-store',signal:controller.signal});
       if(!r.ok)throw new Error('HTTP '+r.status);
       const blob=await r.blob(); if(!blob.size)throw new Error('empty media'); return blob;
     }catch(e){lastErr=e;}
+    finally{clearTimeout(timer);}
   }
   throw lastErr||new Error('media fetch failed');
 }
@@ -1297,7 +1332,7 @@ function videoSlideHTML(x,i){
   const media=direct?'<video data-direct-src="'+esc(direct)+'"'+proxyAttr+(poster?' poster="'+esc(poster)+'"':'')+' data-feed-video="'+i+'" playsinline loop preload="none"></video>':'<div class="video-fallback"><div><strong>直接再生URLがありません</strong></div></div>';
   const source=x.deepDive?('深掘り · '+(x.deepSource||'関連')):(x.channelName||domainOf(x.url));
   const longCard='<div class="long-system-card">'+(poster?'<img '+imageSourceAttrs(poster)+' alt="">':'<div class="long-system-placeholder">長尺動画</div>')+'<div class="long-system-copy"><strong>長尺動画</strong><small>iPhoneのSafari標準プレイヤーで再生します</small><button type="button" data-long-system-play="'+i+'">Safariで再生</button></div></div>';
-  return '<section class="video-slide" data-feed-index="'+i+'">'+media+longCard+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong>この動画を再生できません</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-load-status" data-feed-load-status hidden></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><video class="seek-preview-video" muted playsinline preload="metadata"></video><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><div class="video-scrubber" data-feed-scrub="'+i+'" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="video-scrub-track"><div class="video-scrub-buffer"></div><div class="video-scrub-fill"></div><div class="video-scrub-thumb"></div></div></div><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
+  return '<section class="video-slide" data-feed-index="'+i+'">'+media+longCard+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong>この動画を再生できません</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-load-status" data-feed-load-status hidden></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><video class="seek-preview-video" muted playsinline preload="metadata"></video><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><div class="video-scrubber" data-feed-scrub="'+i+'" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="video-scrub-track"><div class="video-scrub-buffer"></div><div class="video-scrub-fill"></div><div class="video-scrub-thumb"></div></div></div><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>端末保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
 }
 function setupVideoAutoplay(startIndex=0){
   const feed=$('#videoFeed'),vids=activeFeedItems,slides=$$('.video-slide',feed);
