@@ -1,4 +1,4 @@
-# MyMelter PWA 1.1.3 DISCOVER
+# MyMelter PWA 1.2.0 DISCOVER
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -84,6 +84,19 @@ WorkerはGETのみで、Cookieを転送せず、ローカル/プライベート�
 - `https://www.twidouga.net/jp/ranking` が取得先403になった場合だけ、公開されている実ページ `https://www.twidouga.net/jp/ranking_t1.php` を1回だけ自動で試します。
 - 代替URLも403なら「サイト側がWorker経由アクセスを拒否」として停止します。
 
+## Safari取り込み（Worker 403サイト）
+
+Worker接続自体が正常でも取得先サイトがHTTP 403を返す場合は、Safariで実際に表示したページからローカル取込できます。
+
+1. MyMelter → 設定 →「取込ブックマークを準備」
+2. 「取込コードをコピー」
+3. Safariで任意ページをブックマークし、名前を「MyMelter取込」、ブックマークURLをコピーしたコードに置換
+4. 対象ページをSafariで開く
+5. ブックマーク「MyMelter取込」を実行
+6. MyMelterへ戻り、取得した項目をローカルのスナップショットチャンネルとして保存
+
+この方式はWorker/IP経由の取得ではなく、Safari上でユーザーが表示できたDOMから公開リンク・画像・動画候補を抽出します。ログイン回避、CAPTCHA回避、DRM回避は行いません。
+
 ## Appleショートカット保存
 
 MyMelter → 設定 →「Appleショートカットを使う」をONにすると、端末保存ボタンから `MyMelter保存` ショートカットへURLを渡せます。
@@ -108,4 +121,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.1.3 DISCOVER`
+`MyMelter PWA 1.2.0 DISCOVER`

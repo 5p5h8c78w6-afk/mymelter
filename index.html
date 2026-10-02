@@ -10,7 +10,7 @@
   <meta name="format-detection" content="telephone=no" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icons/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=1.1.5" />
+  <link rel="stylesheet" href="./styles.css?v=1.2.0" />
   <script>
     window.MyMelterInlineWorkerTest = async function(ev){
       try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){}
@@ -206,6 +206,14 @@
       </div>
 
       <div class="settings-group">
+        <h3>Safari取り込み</h3>
+        <p class="help">Worker経由を403で拒否するサイトは、Safariで実際に表示したページから一覧をMyMelterへ戻せます。初回だけ「MyMelter取込」ブックマークを準備します。</p>
+        <div class="button-row">
+          <button id="openBrowserImportSetupBtn" class="secondary" type="button">取込ブックマークを準備</button>
+        </div>
+      </div>
+
+      <div class="settings-group">
         <h3>クイック保存</h3>
         <label class="toggle-row"><span><strong>Appleショートカットを使う</strong><small>保存ボタンから「MyMelter保存」を起動</small></span><input id="shortcutEnabled" type="checkbox" /></label>
         <label class="field"><span>ショートカット名</span><input id="shortcutName" value="MyMelter保存" /></label>
@@ -222,7 +230,7 @@
 
       <div class="settings-group">
         <h3>このアプリ</h3>
-        <p class="help">MyMelter PWA 1.1.5 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
+        <p class="help">MyMelter PWA 1.2.0 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
       </div>
     </section>
   </main>
@@ -247,6 +255,32 @@
       <div id="discoverStatus" class="status-line"></div>
       <div id="discoverResults" class="discover-results"></div>
     </form>
+  </dialog>
+
+  <dialog id="browserImportDialog" class="sheet-dialog">
+    <div class="sheet browser-import-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div><p class="eyebrow">SAFARI IMPORT</p><h2>Safariから取り込む</h2></div>
+        <button id="browserImportCloseBtn" type="button" class="round-btn">×</button>
+      </div>
+      <p class="sheet-lead">Workerを使わず、Safariで表示できたページのリンク・画像・動画候補をMyMelterへ戻します。</p>
+      <label class="field"><span>対象ページ</span><input id="browserImportTarget" type="url" readonly /></label>
+      <div class="browser-import-steps">
+        <div><b>1</b><span>下の「取込コードをコピー」を押す</span></div>
+        <div><b>2</b><span>Safariで任意ページをブックマークし、名前を「MyMelter取込」、URLをコピーしたコードへ置き換える</span></div>
+        <div><b>3</b><span>対象ページを開き、そのブックマークを実行するとMyMelterへ戻ります</span></div>
+      </div>
+      <div class="button-row">
+        <button id="copyBookmarkletBtn" type="button" class="primary">取込コードをコピー</button>
+        <button id="openBrowserImportTargetBtn" type="button" class="secondary">対象ページを開く</button>
+      </div>
+      <div id="browserImportStatus" class="status-line"></div>
+      <details class="advanced">
+        <summary>取込コードを表示</summary>
+        <textarea id="bookmarkletCode" class="bookmarklet-code" readonly rows="5"></textarea>
+      </details>
+    </div>
   </dialog>
 
   <dialog id="channelDialog" class="sheet-dialog">
@@ -345,6 +379,6 @@
     </div>
   </dialog>
 
-  <script src="./app.js?v=1.1.5"></script>
+  <script src="./app.js?v=1.2.0"></script>
 </body>
 </html>
