@@ -691,8 +691,9 @@ function openVideoFeed(){
   openVideoFeedItems(vids,activeChannel?.name||'動画');
 }
 function videoSlideHTML(x,i){
-  const direct=x.videoUrl||''; const src=mediaProxyUrl(direct); const poster=x.image||''; const saved=isSavedUrl(x.url);
-  const media=src?`<video src="${esc(src)}" data-direct-src="${esc(direct)}" ${poster?`poster="${esc(poster)}"`:''} playsinline muted loop preload="metadata"></video>`:`<div class="video-fallback"><div><strong>直接再生URLがありません</strong><br><br><button class="primary" data-feed-source-open="${i}">元ページを開く</button></div></div>`;
+  const direct=x.videoUrl||''; const proxy=mediaProxyUrl(direct); const poster=x.image||''; const saved=isSavedUrl(x.url);
+  const proxyAttr=proxy&&proxy!==direct?` data-proxy-src="${esc(proxy)}"`:'';
+  const media=direct?`<video src="${esc(direct)}"${proxyAttr} ${poster?`poster="${esc(poster)}"`:''} playsinline muted loop preload="metadata"></video>`:`<div class="video-fallback"><div><strong>直接再生URLがありません</strong><br><br><button class="primary" data-feed-source-open="${i}">元ページを開く</button></div></div>`;
   return `<section class="video-slide" data-feed-index="${i}">${media}<button class="video-tap-toggle" data-feed-toggle="${i}" aria-label="再生・一時停止"></button><div class="video-overlay"><strong>${esc(x.title||'動画')}</strong><small>${esc(x.channelName||domainOf(x.url))}</small></div><div class="video-actions"><button class="video-action" data-feed-quick-save="${i}"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="${i}"><span class="circle">${saved?'♥':'♡'}</span><span>${saved?'保存済み':'保存'}</span></button>${x.url&&x.url!==x.videoUrl?`<button class="video-action" data-feed-source-open="${i}"><span class="circle">↗</span><span>元ページ</span></button>`:''}</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>`;
 }
 function setupVideoAutoplay(){
@@ -701,11 +702,11 @@ function setupVideoAutoplay(){
     const idx=Number(slide.dataset.feedIndex); const item=vids[idx]; const v=slide.querySelector('video'); if(!v||!item)return; const key=item.videoUrl||item.url;
     v.addEventListener('loadedmetadata',()=>{const pos=Number(state.positions[key]||0);if(pos>1&&Number.isFinite(v.duration)&&pos<v.duration-2){try{v.currentTime=pos;}catch{}}},{once:true});
     v.addEventListener('error',()=>{
-      const direct=v.dataset.directSrc||'';
-      if(direct&&v.src!==direct&&!v.dataset.directTried){
-        v.dataset.directTried='1'; v.src=direct; v.load(); v.play().catch(()=>{}); return;
+      const proxy=v.dataset.proxySrc||'';
+      if(proxy&&!v.dataset.proxyTried){
+        v.dataset.proxyTried='1'; v.src=proxy; v.load(); v.play().catch(()=>{}); return;
       }
-      slide.classList.add('video-load-error'); toast('動画を再生できません。取込コードv3で再取り込みしてください');
+      slide.classList.add('video-load-error'); toast('動画を再生できません。取込コードv3で再取り込みし、必要ならWorker 1.2へ更新してください');
     });
     const keep=()=>{if(!Number.isFinite(v.duration))return; if(v.currentTime>1&&v.currentTime<v.duration-2)state.positions[key]=Math.floor(v.currentTime);else delete state.positions[key];saveState(false);};
     v.addEventListener('pause',keep); v.addEventListener('ended',()=>{delete state.positions[key];saveState(false);});
