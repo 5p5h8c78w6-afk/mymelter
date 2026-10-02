@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://pbs.twimg.com" crossorigin />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icons/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=1.3.8" />
+  <link rel="stylesheet" href="./styles.css?v=1.3.9" />
   <script>
     window.MyMelterInlineWorkerTest = async function(ev){
       try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){}
@@ -38,7 +38,7 @@
         var ver=r.headers.get('X-MyMelter-Worker-Version')||'旧版/不明';
         var err=r.headers.get('X-MyMelter-Error')||'';
         if(r.ok){
-          if(status) status.textContent='接続PASS · Worker '+ver+(ver==='1.1'?' · 403診断対応':'');
+          var vp=String(ver).split('.').map(Number),saveOK=((vp[0]||0)>1)||((vp[0]||0)===1&&(vp[1]||0)>=3); if(status) status.textContent='接続PASS · Worker '+ver+(saveOK?' · 端末保存対応':' · 端末保存非対応（1.3以上が必要）');
         }else{
           if(status) status.textContent='接続応答あり · HTTP '+r.status+' · Worker '+ver+(err?' · '+err:'');
         }
@@ -204,7 +204,7 @@
           <a id="workerDirectTestLink" class="secondary worker-direct-link" href="https://mymelter-proxy.5p5h8c78w6.workers.dev/?url=https%3A%2F%2Fexample.com%2F" target="_blank" rel="noopener">直通テスト</a>
         </div>
         <div id="workerTestStatus" class="status-line" role="status" aria-live="polite">HTML診断待機中…</div>
-        <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。Worker 1.1では403の原因も区別表示します。</p>
+        <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。Worker 1.3以上で動画の端末保存に対応します。旧Workerでは保存ボタンから動画を開かない安全動作になります。</p>
       </div>
 
       <div class="settings-group">
@@ -232,7 +232,7 @@
 
       <div class="settings-group">
         <h3>このアプリ</h3>
-        <p class="help">MyMelter PWA 1.3.8 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
+        <p class="help">MyMelter PWA 1.3.9 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
       </div>
     </section>
   </main>
@@ -381,6 +381,6 @@
     </div>
   </dialog>
 
-  <script src="./app.js?v=1.3.8"></script>
+  <script src="./app.js?v=1.3.9"></script>
 </body>
 </html>
