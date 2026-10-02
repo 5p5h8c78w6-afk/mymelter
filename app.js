@@ -1,4 +1,4 @@
-const APP_VERSION = '1.3.1-DISCOVER';
+const APP_VERSION = '1.3.2-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -45,6 +45,8 @@ let feedCurrentIndex = 0;
 let feedRoutePrefs = new Map();
 let feedActivationSerial = 0;
 let feedHotOrder = [];
+let pendingMediaShare = null;
+let pressCandidate = null;
 let browserImportTarget = '';
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -776,11 +778,11 @@ function renderReader(){
 }
 function contentItemHTML(x,i){
   const th=x.image?`<img class="content-thumb" ${imageSourceAttrs(x.image)} alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="content-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
-  return `<article class="content-card">${th}<div class="content-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(typeLabel(mediaKind(x)))} · ${esc(domainOf(x.url))}</small><div class="content-actions"><button class="open-btn" data-active-open="${i}">開く</button><button class="save-btn" data-active-save="${i}">♡ 保存済み</button>${x.videoUrl||x.image?`<button class="save-btn" data-active-quick-save="${i}">⇩ 端末保存</button>`:''}</div></div></article>`;
+  return `<article class="content-card">${th}<div class="content-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(typeLabel(mediaKind(x)))} · ${esc(domainOf(x.url))}</small><div class="content-actions"><button class="open-btn" data-active-open="${i}">開く</button><button class="save-btn" data-active-save="${i}">${isSavedUrl(x.url)?'♥ 保存済み':'♡ 保存'}</button>${x.videoUrl||x.image?`<button class="save-btn" data-active-quick-save="${i}">⇩ 端末保存</button>`:''}</div></div></article>`;
 }
 function gridItemHTML(x,i){
   const media=x.image?`<img ${imageSourceAttrs(x.image)} alt="" loading="lazy" referrerpolicy="no-referrer">`:x.videoUrl?`<video src="${esc(x.videoUrl)}" muted playsinline preload="metadata"></video>`:`<div class="content-placeholder" style="width:100%;aspect-ratio:1/1">◇</div>`;
-  return `<article class="grid-card">${media}<div class="grid-copy"><strong>${esc(x.title||'無題')}</strong><div class="grid-actions"><button data-active-open="${i}">開く</button><button data-active-save="${i}">保存</button><button data-active-quick-save="${i}">端末へ</button></div></div></article>`;
+  return `<article class="grid-card">${media}<div class="grid-copy"><strong>${esc(x.title||'無題')}</strong><div class="grid-actions"><button data-active-open="${i}">開く</button><button data-active-save="${i}">${isSavedUrl(x.url)?'♥ 保存済み':'♡ 保存'}</button><button data-active-quick-save="${i}">端末へ</button></div></div></article>`;
 }
 function recordHistory(item,render=true){
   if(!item?.url)return;
@@ -792,6 +794,72 @@ function saveItem(item){
   const entry={...(prev||{}),...(cat||{}),...item,savedAt:Date.now(),viewCount:Math.max(Number(item.viewCount||0),Number(cat?.viewCount||0),Number(prev?.viewCount||0))};
   state.saved=[entry,...state.saved.filter(x=>x.url!==item.url)].slice(0,500); if(!cat)rememberItems([entry]); saveState(); toast('保存済みに追加しました');
 }
+function toggleSavedItem(item,button=null){
+  if(!item?.url)return false;
+  const exists=isSavedUrl(item.url);
+  if(exists){
+    state.saved=state.saved.filter(x=>x.url!==item.url);saveState(false);toast('保存済みから外しました');
+  }else{
+    saveItem(item);
+  }
+  const nowSaved=!exists;
+  if(button){
+    const circle=button.querySelector('.circle');
+    const label=button.querySelector('.video-action-label')||button.querySelector('span:last-child');
+    if(circle)circle.textContent=nowSaved?'♥':'♡';
+    if(label)label.textContent=nowSaved?'保存済み':'保存';
+    if(button.matches('.save-btn,[data-active-save]'))button.textContent=nowSaved?'♥ 保存済み':'♡ 保存';
+  }
+  return nowSaved;
+}
+function ensureMediaSaveDialog(){
+  let d=document.getElementById('mediaSaveDialog'); if(d)return d;
+  d=document.createElement('dialog');d.id='mediaSaveDialog';d.className='sheet-dialog media-save-dialog';
+  d.innerHTML='<div class="sheet media-save-sheet"><div class="sheet-handle"></div><div class="sheet-head"><div><p class="eyebrow">DEVICE SAVE</p><h2>端末へ保存</h2></div><button type="button" class="round-btn" data-media-save-close>×</button></div><div class="media-save-preview" data-media-save-preview></div><p class="sheet-lead" data-media-save-status>準備しています…</p><div class="button-row"><button type="button" class="primary" data-media-share disabled>共有して保存</button><button type="button" class="secondary" data-media-save-close>閉じる</button></div></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll('[data-media-save-close]').forEach(b=>b.onclick=closeMediaSaveDialog);
+  d.querySelector('[data-media-share]').onclick=sharePreparedMedia;
+  return d;
+}
+function closeMediaSaveDialog(){
+  const d=document.getElementById('mediaSaveDialog'); if(d?.open)d.close();
+  if(pendingMediaShare?.objectUrl)URL.revokeObjectURL(pendingMediaShare.objectUrl);
+  pendingMediaShare=null;
+}
+async function sharePreparedMedia(){
+  const d=ensureMediaSaveDialog(),btn=d.querySelector('[data-media-share]'),status=d.querySelector('[data-media-save-status]');
+  if(!pendingMediaShare?.file){status.textContent='まだ準備中です。';return;}
+  const file=pendingMediaShare.file;
+  try{
+    if(navigator.share&&navigator.canShare?.({files:[file]})){
+      await navigator.share({title:pendingMediaShare.title||'MyMelter',files:[file]});closeMediaSaveDialog();return;
+    }
+  }catch(e){if(e?.name==='AbortError')return;}
+  if(pendingMediaShare.objectUrl){
+    const a=document.createElement('a');a.href=pendingMediaShare.objectUrl;a.download=file.name;a.click();
+    status.textContent='ダウンロードを開始しました。';
+  }else status.textContent='この端末ではファイル共有を利用できません。';
+}
+async function prepareDeviceSave(item){
+  const target=item?.videoUrl||item?.image||item?.url; if(!target)return;
+  if(state.settings.shortcutEnabled){
+    const name=state.settings.shortcutName||'MyMelter保存';
+    window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(target)}`;return;
+  }
+  const d=ensureMediaSaveDialog(),status=d.querySelector('[data-media-save-status]'),share=d.querySelector('[data-media-share]'),preview=d.querySelector('[data-media-save-preview]');
+  status.textContent='メディアファイルを準備中…';share.disabled=true;preview.innerHTML=item?.image?`<img ${imageSourceAttrs(item.image)} alt="">`:'<div class="media-save-placeholder">動画を準備しています</div>';
+  if(!d.open)d.showModal();
+  try{
+    const blob=await fetchMediaBlob(target),ext=mediaFileExtension(target,blob.type),name=`MyMelter_${Date.now()}.${ext}`,file=new File([blob],name,{type:blob.type||'application/octet-stream'});
+    const objectUrl=URL.createObjectURL(blob);
+    pendingMediaShare={file,objectUrl,title:item.title||'MyMelter'};
+    status.textContent='準備完了。「共有して保存」を押してください。';share.disabled=false;
+    if(!item.image&&blob.type.startsWith('video/'))preview.innerHTML=`<video src="${esc(objectUrl)}" muted playsinline preload="metadata"></video>`;
+  }catch(e){
+    console.warn('device save prepare failed',e);status.textContent='ファイル準備に失敗しました。Worker接続と動画URLを確認してください。';share.disabled=true;
+  }
+}
+
 function openActiveItem(index){
   const item=activeItems[Number(index)];
   if(!item)return;
@@ -837,28 +905,7 @@ async function fetchMediaBlob(target){
   }
   throw lastErr||new Error('media fetch failed');
 }
-async function quickSave(item){
-  const target=item.videoUrl||item.image||item.url; if(!target)return;
-  if(state.settings.shortcutEnabled){
-    const name=state.settings.shortcutName||'MyMelter保存'; const u=`shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(target)}`;
-    toast('保存ショートカットを起動します'); window.location.href=u; return;
-  }
-  if(item.videoUrl||item.image){
-    try{
-      toast('メディアファイルを準備中…');
-      const blob=await fetchMediaBlob(target),ext=mediaFileExtension(target,blob.type),name=`MyMelter_${Date.now()}.${ext}`;
-      const file=new File([blob],name,{type:blob.type||'application/octet-stream'});
-      if(navigator.share&&navigator.canShare?.({files:[file]})){
-        await navigator.share({title:item.title||'MyMelter',files:[file]}); return;
-      }
-      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);return;
-    }catch(e){ if(e?.name==='AbortError')return; console.warn('file save fallback',e); }
-  }
-  try{
-    if(navigator.share){ await navigator.share({title:item.title||'MyMelter',url:target}); return; }
-  }catch(e){ if(e?.name==='AbortError')return; }
-  const a=document.createElement('a');a.href=target;a.target='_blank';a.rel='noopener';a.download='';a.click(); toast('メディアを開きました。共有から保存してください');
-}
+async function quickSave(item){return prepareDeviceSave(item);}
 
 function mediaProxyUrl(src){
   const direct=normalizeUrl(src); if(!direct)return '';
@@ -919,6 +966,7 @@ function feedSlide(i){return document.querySelector('.video-slide[data-feed-inde
 function releaseFeedVideoElement(v,final=false){
   if(!v)return;
   try{v.pause();}catch{}
+  clearTimeout(v._routeTimer);
   v.dataset.feedState='released';
   v.dataset.loadSerial=String((Number(v.dataset.loadSerial)||0)+1);
   v.removeAttribute('src');
@@ -938,10 +986,19 @@ function loadFeedSource(v,src,route,stateName='active'){
   v.dataset.feedState=stateName;
   v.dataset.currentRoute=route;
   v.dataset.expectedSrc=src;
-  v.preload=stateName==='active'?'auto':'metadata';
+  v.preload='auto';
   v.muted=!feedSoundOn;
+  clearTimeout(v._routeTimer);
   v.src=src;
   try{v.load();}catch{}
+  if(stateName==='active'&&route==='direct'&&v.dataset.proxySrc){
+    const serial=v.dataset.loadSerial;
+    v._routeTimer=setTimeout(()=>{
+      if(v.dataset.loadSerial!==serial||v.dataset.feedState!=='active'||v.readyState>=2||v.dataset.currentRoute!=='direct')return;
+      v.dataset.proxyTried='1';feedRoutePrefs.set(v.dataset.directSrc||'','proxy');
+      loadFeedSource(v,v.dataset.proxySrc,'proxy','active');
+    },1700);
+  }
 }
 function preferredFeedSource(v){
   const direct=v?.dataset.directSrc||'',proxy=v?.dataset.proxySrc||'';
@@ -1020,14 +1077,14 @@ function videoSlideHTML(x,i){
   const proxyAttr=proxy&&proxy!==direct?' data-proxy-src="'+esc(proxy)+'"':'';
   const media=direct?'<video data-direct-src="'+esc(direct)+'"'+proxyAttr+(poster?' poster="'+esc(poster)+'"':'')+' data-feed-video="'+i+'" playsinline loop preload="none"></video>':'<div class="video-fallback"><div><strong>直接再生URLがありません</strong></div></div>';
   const source=x.deepDive?('深掘り · '+(x.deepSource||'関連')):(x.channelName||domainOf(x.url));
-  return '<section class="video-slide" data-feed-index="'+i+'">'+media+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong>この動画を再生できません</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><canvas width="160" height="90"></canvas><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><input class="video-seek" data-feed-seek="'+i+'" type="range" min="0" max="0" step="0.1" value="0"><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
+  return '<section class="video-slide" data-feed-index="'+i+'">'+media+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong>この動画を再生できません</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><video class="seek-preview-video" muted playsinline preload="metadata"></video><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><div class="video-scrubber" data-feed-scrub="'+i+'" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="video-scrub-track"><div class="video-scrub-fill"></div><div class="video-scrub-thumb"></div></div></div><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
 }
 function setupVideoAutoplay(startIndex=0){
   const feed=$('#videoFeed'),vids=activeFeedItems,slides=$$('.video-slide',feed);
   slides.forEach(slide=>{
     const i=Number(slide.dataset.feedIndex),item=vids[i],v=slide.querySelector('video');if(!v||!item)return;
-    const key=item.videoUrl||item.url,cur=slide.querySelector('[data-feed-current]'),dur=slide.querySelector('[data-feed-duration]'),seek=slide.querySelector('[data-feed-seek]');
-    const tick=()=>{if(cur)cur.textContent=mediaTime(v.currentTime);if(dur&&Number.isFinite(v.duration))dur.textContent=mediaTime(v.duration);if(seek&&Number.isFinite(v.duration)){seek.max=String(v.duration);if(!seek.dataset.dragging)seek.value=String(v.currentTime||0);const pct=v.duration?Math.max(0,Math.min(100,(Number(seek.value)||0)/v.duration*100)):0;seek.style.setProperty('--seek-pct',pct+'%');}};
+    const key=item.videoUrl||item.url,cur=slide.querySelector('[data-feed-current]'),dur=slide.querySelector('[data-feed-duration]'),scrub=slide.querySelector('[data-feed-scrub]');
+    const tick=()=>{if(cur)cur.textContent=mediaTime(v.currentTime);if(dur&&Number.isFinite(v.duration))dur.textContent=mediaTime(v.duration);if(scrub&&Number.isFinite(v.duration)&&scrub.dataset.dragging!=='1')updateScrubberVisual(scrub,v.currentTime,v.duration);};
     v.addEventListener('loadedmetadata',()=>{
       if(v.dataset.feedState==='released')return;
       try{v.currentTime=0;}catch{}
@@ -1039,7 +1096,7 @@ function setupVideoAutoplay(startIndex=0){
       const route=v.dataset.currentRoute||'direct',direct=v.dataset.directSrc||'';
       if(direct)feedRoutePrefs.set(direct,route);
     });
-    v.addEventListener('waiting',()=>{const seek=slide.querySelector('[data-feed-seek]');if(v.dataset.feedState==='active'&&seek?.dataset.dragging!=='1')slide.classList.add('video-buffering');});
+    v.addEventListener('waiting',()=>{const scrub=slide.querySelector('[data-feed-scrub]');if(v.dataset.feedState==='active'&&scrub?.dataset.dragging!=='1')slide.classList.add('video-buffering');});
     v.addEventListener('playing',()=>{slide.classList.remove('video-buffering','video-needs-tap');slide.classList.add('is-playing');});
     v.addEventListener('timeupdate',tick);
     v.addEventListener('pause',()=>slide.classList.remove('is-playing'));
@@ -1139,6 +1196,8 @@ $('#installBtn').onclick=async()=>{if(deferredInstallPrompt){deferredInstallProm
 
 // Delegated events
 document.addEventListener('click',async e=>{
+  const pressAction=actionablePressButton(e.target);
+  if(pressAction&&Number(pressAction.dataset.suppressClickUntil||0)>Date.now()){e.preventDefault();return;}
   const browserImport=e.target.closest('[data-browser-import-target]'); if(browserImport){openBrowserImportSetup(browserImport.dataset.browserImportTarget||'');return;}
   const rank=e.target.closest('[data-ranking-index]'); if(rank){const item=currentRankingItems[Number(rank.dataset.rankingIndex)];if(item)openItem(item);return;}
   const colFilter=e.target.closest('[data-collection-filter]'); if(colFilter){state.ui.activeCollection=colFilter.dataset.collectionFilter;saveState(false);renderSaved();return;}
@@ -1151,21 +1210,14 @@ document.addEventListener('click',async e=>{
   const addAll=e.target.closest('[data-add-all-candidates]'); if(addAll){addAllCandidates();return;}
   const prevC=e.target.closest('[data-preview-candidate]'); if(prevC){const c=state.candidates.find(x=>x.id===prevC.dataset.previewCandidate);if(c)openChannel(normalizeChannel(c));return;}
   const activeOpen=e.target.closest('[data-active-open]'); if(activeOpen){openActiveItem(Number(activeOpen.dataset.activeOpen));return;}
-  const activeSave=e.target.closest('[data-active-save]'); if(activeSave){saveItem(activeItems[Number(activeSave.dataset.activeSave)]);return;}
-  const activeQuick=e.target.closest('[data-active-quick-save]'); if(activeQuick){await quickSave(activeItems[Number(activeQuick.dataset.activeQuickSave)]);return;}
+  const activeSave=e.target.closest('[data-active-save]'); if(activeSave){toggleSavedItem(activeItems[Number(activeSave.dataset.activeSave)],activeSave);return;}
+  const activeQuick=e.target.closest('[data-active-quick-save]'); if(activeQuick){await prepareDeviceSave(activeItems[Number(activeQuick.dataset.activeQuickSave)]);return;}
   const launch=e.target.closest('#launchVideoFeedBtn'); if(launch){openVideoFeed();return;}
   const feedSlide=e.target.closest('[data-feed-index]');
   const feedVideo=e.target.closest('video[data-feed-video]'); if(feedVideo){if(feedVideo.paused){feedVideo.muted=!feedSoundOn;feedVideo.play().catch(()=>{});}else feedVideo.pause();return;}
   const feedSound=e.target.closest('[data-feed-sound]'); if(feedSound){setFeedSound(!feedSoundOn);const slide=feedSound.closest('.video-slide');const v=slide?.querySelector('video');if(v){v.muted=!feedSoundOn;v.play().catch(()=>{});}return;}
-  const feedQuick=e.target.closest('[data-feed-quick-save]'); if(feedQuick&&feedSlide){await quickSave(activeFeedItems[Number(feedQuick.dataset.feedQuickSave)]);return;}
-  const feedSave=e.target.closest('[data-feed-save]'); if(feedSave&&feedSlide){
-    const item=activeFeedItems[Number(feedSave.dataset.feedSave)];
-    if(item){
-      if(isSavedUrl(item.url)){state.saved=state.saved.filter(x=>x.url!==item.url);saveState(false);feedSave.querySelector('.circle').textContent='♡';feedSave.querySelector('span:last-child').textContent='保存';toast('保存済みから外しました');}
-      else{saveItem(item);feedSave.querySelector('.circle').textContent='♥';feedSave.querySelector('span:last-child').textContent='保存済み';}
-    }
-    return;
-  }
+  const feedQuick=e.target.closest('[data-feed-quick-save]'); if(feedQuick&&feedSlide){await prepareDeviceSave(activeFeedItems[Number(feedQuick.dataset.feedQuickSave)]);return;}
+  const feedSave=e.target.closest('[data-feed-save]'); if(feedSave&&feedSlide){toggleSavedItem(activeFeedItems[Number(feedSave.dataset.feedSave)],feedSave);return;}
   const feedToggle=e.target.closest('[data-feed-toggle]'); if(feedToggle){const slide=feedToggle.closest('.video-slide');const v=slide?.querySelector('video');if(v){if(v.paused)v.play().catch(()=>{});else v.pause();}return;}
   const feedRetry=e.target.closest('[data-feed-retry]'); if(feedRetry){const i=Number(feedRetry.dataset.feedRetry),slide=feedRetry.closest('.video-slide'),v=slide?.querySelector('video');if(v){feedRoutePrefs.delete(v.dataset.directSrc||'');delete v.dataset.proxyTried;releaseFeedVideoElement(v);slide?.classList.remove('video-load-error');activateFeedIndex(i,true);}return;}
   const feedSource=e.target.closest('[data-feed-source-open]'); if(feedSource){const item=activeFeedItems[Number(feedSource.dataset.feedSourceOpen)];if(item?.url)window.open(item.url,'_blank','noopener');return;}
@@ -1185,82 +1237,134 @@ document.addEventListener('error',e=>{
   img.classList.add('media-image-error');
 },true);
 
-function seekPreviewBox(seek){return seek?.closest('.video-progress')?.querySelector('.seek-preview')||null;}
-function drawSeekPreviewFrame(seek,v){
-  const box=seekPreviewBox(seek),canvas=box?.querySelector('canvas'); if(!box||!canvas||!v)return;
-  try{
-    const ctx=canvas.getContext('2d');
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    const vw=v.videoWidth||160,vh=v.videoHeight||90,ratio=Math.max(canvas.width/vw,canvas.height/vh);
-    const dw=vw*ratio,dh=vh*ratio,dx=(canvas.width-dw)/2,dy=(canvas.height-dh)/2;
-    ctx.drawImage(v,dx,dy,dw,dh);box.classList.add('has-frame');
-  }catch{}
+function scrubPreviewBox(scrub){return scrub?.closest('.video-progress')?.querySelector('.seek-preview')||null;}
+function scrubVideo(scrub){return scrub?.closest('.video-slide')?.querySelector('video')||null;}
+function scrubValueFromClientX(scrub,clientX){
+  const v=scrubVideo(scrub);if(!scrub||!v||!Number.isFinite(v.duration)||v.duration<=0)return 0;
+  const r=scrub.getBoundingClientRect(),pct=Math.max(0,Math.min(1,(clientX-r.left)/Math.max(1,r.width)));
+  return pct*v.duration;
 }
-function scheduleSeekPreviewFrame(seek,v,target){
-  if(!seek||!v||seek.dataset.dragging!=='1')return;
-  seek._previewTarget=target;
-  if(seek._previewBusy)return;
-  const now=performance.now(),wait=Math.max(0,180-(now-(seek._previewLast||0)));
-  clearTimeout(seek._previewTimer);
-  seek._previewTimer=setTimeout(()=>{
-    if(seek.dataset.dragging!=='1')return;
-    seek._previewBusy=true;seek._previewLast=performance.now();
-    const token=(seek._previewToken||0)+1;seek._previewToken=token;
-    const t=Number(seek._previewTarget)||0;
-    const done=()=>{
-      if(token===seek._previewToken)drawSeekPreviewFrame(seek,v);
-      seek._previewBusy=false;
-      if(seek.dataset.dragging==='1'&&Math.abs((Number(seek._previewTarget)||0)-t)>.15)scheduleSeekPreviewFrame(seek,v,Number(seek._previewTarget)||0);
+function updateScrubberVisual(scrub,time,duration){
+  if(!scrub||!Number.isFinite(duration)||duration<=0)return;
+  const pct=Math.max(0,Math.min(100,(Number(time)||0)/duration*100));
+  scrub.style.setProperty('--seek-pct',pct+'%');
+  scrub.setAttribute('aria-valuemax',String(duration));
+  scrub.setAttribute('aria-valuenow',String(Number(time)||0));
+  const fill=scrub.querySelector('.video-scrub-fill'),thumb=scrub.querySelector('.video-scrub-thumb');
+  if(fill)fill.style.width=pct+'%';if(thumb)thumb.style.left=pct+'%';
+}
+function prepareScrubPreviewVideo(scrub){
+  const box=scrubPreviewBox(scrub),pv=box?.querySelector('.seek-preview-video'),v=scrubVideo(scrub);
+  if(!pv||!v)return null;
+  const src=v.currentSrc||v.getAttribute('src')||v.dataset.directSrc||'';
+  if(src&&pv.dataset.previewSrc!==src){
+    pv.dataset.previewSrc=src;pv.src=src;pv.muted=true;pv.preload='metadata';
+    try{pv.load();}catch{}
+  }
+  return pv;
+}
+function scheduleScrubPreview(scrub,target){
+  if(!scrub||scrub.dataset.dragging!=='1')return;
+  scrub._previewTarget=target;
+  const box=scrubPreviewBox(scrub),pv=prepareScrubPreviewVideo(scrub);
+  if(!box||!pv)return;
+  const now=performance.now(),wait=Math.max(0,220-(now-(scrub._previewLast||0)));
+  clearTimeout(scrub._previewTimer);
+  scrub._previewTimer=setTimeout(()=>{
+    if(scrub.dataset.dragging!=='1')return;
+    scrub._previewLast=performance.now();
+    const t=Number(scrub._previewTarget)||0;
+    const seekNow=()=>{
+      if(scrub.dataset.dragging!=='1')return;
+      const done=()=>{box.classList.add('has-video');};
+      pv.addEventListener('seeked',done,{once:true});
+      try{pv.currentTime=t;}catch{}
     };
-    v.addEventListener('seeked',done,{once:true});
-    try{v.currentTime=t;}catch{seek._previewBusy=false;}
+    if(pv.readyState>=1)seekNow();else pv.addEventListener('loadedmetadata',seekNow,{once:true});
   },wait);
 }
-function beginFeedSeek(seek){
-  if(!seek||seek.dataset.dragging==='1')return;
-  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'),box=seekPreviewBox(seek);
-  seek.dataset.dragging='1';
-  seek.dataset.wasPlaying=v&&!v.paused?'1':'0';
-  if(v&&!v.paused){try{v.pause();}catch{}}
-  if(box)box.classList.add('is-visible');
-}
-function previewFeedSeek(seek){
-  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); if(!v||!Number.isFinite(v.duration))return;
-  const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
-  const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
-  const pct=v.duration?next/v.duration*100:0;seek.style.setProperty('--seek-pct',pct+'%');
-  const box=seekPreviewBox(seek),ptime=box?.querySelector('[data-feed-preview-time]');
+function updateScrubFromClient(scrub,clientX){
+  const slide=scrub.closest('.video-slide'),v=scrubVideo(scrub);if(!v||!Number.isFinite(v.duration))return;
+  const next=scrubValueFromClientX(scrub,clientX),pct=v.duration?next/v.duration*100:0;
+  scrub.dataset.previewTime=String(next);updateScrubberVisual(scrub,next,v.duration);
+  const current=slide.querySelector('[data-feed-current]');if(current)current.textContent=mediaTime(next);
+  const box=scrubPreviewBox(scrub),ptime=box?.querySelector('[data-feed-preview-time]');
   if(box){box.style.left=pct+'%';box.classList.add('is-visible');}
   if(ptime)ptime.textContent=mediaTime(next);
-  scheduleSeekPreviewFrame(seek,v,next);
+  scheduleScrubPreview(scrub,next);
 }
-function commitFeedSeek(seek){
-  if(!seek||seek.dataset.dragging!=='1')return;
-  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'),box=seekPreviewBox(seek);
-  const wasPlaying=seek.dataset.wasPlaying==='1';
-  delete seek.dataset.dragging; delete seek.dataset.wasPlaying;
-  clearTimeout(seek._previewTimer);seek._previewToken=(seek._previewToken||0)+1;seek._previewBusy=false;
+function beginFeedScrub(scrub,e){
+  if(!scrub||scrub.dataset.dragging==='1')return;
+  const v=scrubVideo(scrub),box=scrubPreviewBox(scrub);
+  scrub.dataset.dragging='1';scrub.dataset.pointerId=String(e.pointerId);
+  scrub.dataset.wasPlaying=v&&!v.paused?'1':'0';
+  if(v&&!v.paused){try{v.pause();}catch{}}
+  try{scrub.setPointerCapture(e.pointerId);}catch{}
+  if(box)box.classList.add('is-visible');
+  updateScrubFromClient(scrub,e.clientX);
+}
+function finishFeedScrub(scrub,e){
+  if(!scrub||scrub.dataset.dragging!=='1')return;
+  const v=scrubVideo(scrub),box=scrubPreviewBox(scrub),wasPlaying=scrub.dataset.wasPlaying==='1';
+  const next=Number(scrub.dataset.previewTime)||0;
+  delete scrub.dataset.dragging;delete scrub.dataset.wasPlaying;delete scrub.dataset.pointerId;
+  clearTimeout(scrub._previewTimer);
+  try{scrub.releasePointerCapture(e.pointerId);}catch{}
   if(!v||!Number.isFinite(v.duration)){box?.classList.remove('is-visible');return;}
-  const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
-  slide?.classList.add('video-buffering');
+  const slide=scrub.closest('.video-slide');slide?.classList.add('video-buffering');
   let finished=false;
-  const finish=()=>{
-    if(finished)return;finished=true;
-    slide?.classList.remove('video-buffering');
-    drawSeekPreviewFrame(seek,v);
-    setTimeout(()=>box?.classList.remove('is-visible'),120);
+  const done=()=>{
+    if(finished)return;finished=true;slide?.classList.remove('video-buffering');
+    setTimeout(()=>box?.classList.remove('is-visible','has-video'),100);
+    const pv=box?.querySelector('.seek-preview-video');if(pv){pv.pause();pv.removeAttribute('src');try{pv.load();}catch{}}
     if(wasPlaying){v.muted=!feedSoundOn;v.play().catch(()=>{});}
   };
-  try{v.currentTime=next;}catch{finish();return;}
-  const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
-  v.addEventListener('seeked',finish,{once:true});setTimeout(finish,3000);
+  try{v.currentTime=Math.max(0,Math.min(v.duration,next));}catch{done();return;}
+  v.addEventListener('seeked',done,{once:true});setTimeout(done,3000);
 }
-document.addEventListener('pointerdown',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)beginFeedSeek(seek);});
-document.addEventListener('touchstart',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)beginFeedSeek(seek);},{passive:true});
-document.addEventListener('input',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(!seek)return;if(seek.dataset.dragging!=='1')beginFeedSeek(seek);previewFeedSeek(seek);});
-document.addEventListener('change',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)commitFeedSeek(seek);});
-document.addEventListener('pointerup',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)commitFeedSeek(seek);});
-document.addEventListener('touchend',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)commitFeedSeek(seek);},{passive:true});
+document.addEventListener('pointerdown',e=>{
+  const scrub=e.target.closest?.('[data-feed-scrub]');if(!scrub)return;
+  e.preventDefault();e.stopPropagation();beginFeedScrub(scrub,e);
+},{capture:true});
+document.addEventListener('pointermove',e=>{
+  const scrub=document.querySelector('[data-feed-scrub][data-dragging="1"]');if(!scrub)return;
+  if(String(e.pointerId)!==scrub.dataset.pointerId)return;e.preventDefault();updateScrubFromClient(scrub,e.clientX);
+},{capture:true});
+document.addEventListener('pointerup',e=>{
+  const scrub=document.querySelector('[data-feed-scrub][data-dragging="1"]');if(!scrub)return;
+  if(String(e.pointerId)!==scrub.dataset.pointerId)return;e.preventDefault();finishFeedScrub(scrub,e);
+},{capture:true});
+document.addEventListener('pointercancel',e=>{
+  const scrub=document.querySelector('[data-feed-scrub][data-dragging="1"]');if(scrub)finishFeedScrub(scrub,e);
+},{capture:true});
+
+function actionablePressButton(target){
+  return target?.closest?.('[data-active-save],[data-active-quick-save],[data-feed-save],[data-feed-quick-save]')||null;
+}
+async function runPressAction(button){
+  if(!button)return;
+  if(button.hasAttribute('data-active-save')){toggleSavedItem(activeItems[Number(button.dataset.activeSave)],button);return;}
+  if(button.hasAttribute('data-active-quick-save')){await prepareDeviceSave(activeItems[Number(button.dataset.activeQuickSave)]);return;}
+  if(button.hasAttribute('data-feed-save')){toggleSavedItem(activeFeedItems[Number(button.dataset.feedSave)],button);return;}
+  if(button.hasAttribute('data-feed-quick-save')){await prepareDeviceSave(activeFeedItems[Number(button.dataset.feedQuickSave)]);return;}
+}
+document.addEventListener('pointerdown',e=>{
+  const button=actionablePressButton(e.target);if(!button)return;
+  pressCandidate={button,pointerId:e.pointerId,x:e.clientX,y:e.clientY};
+  button.classList.add('pressing');
+},{capture:true});
+document.addEventListener('pointerup',e=>{
+  const p=pressCandidate;if(!p||p.pointerId!==e.pointerId)return;
+  pressCandidate=null;p.button.classList.remove('pressing');
+  const moved=Math.hypot(e.clientX-p.x,e.clientY-p.y);
+  if(moved>14)return;
+  p.button.dataset.suppressClickUntil=String(Date.now()+700);
+  e.preventDefault();e.stopPropagation();
+  runPressAction(p.button);
+},{capture:true});
+document.addEventListener('pointercancel',()=>{
+  if(pressCandidate?.button)pressCandidate.button.classList.remove('pressing');pressCandidate=null;
+},{capture:true});
 
 // Initial launch
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('SW',e));}
