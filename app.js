@@ -1098,7 +1098,7 @@ function startFeedPlaybackWatchdog(){
         loadFeedSource(v,src,route,'active');
         v.dataset.shouldPlay='1';
         v._watchRecoverStage=3;
-        const start=()=>{if(v.dataset.loadSerial!==String(Number(serial)+1)&&v.dataset.feedState==='active')kickFeedPlayback(v,slide,'再読込後の再生を開始中…');};
+        const start=()=>{if(v.dataset.loadSerial===String(Number(serial)+1)&&v.dataset.feedState==='active')kickFeedPlayback(v,slide,'再読込後の再生を開始中…');};
         if(v.readyState>=2)start();else v.addEventListener('canplay',start,{once:true});
         return;
       }
