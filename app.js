@@ -305,16 +305,66 @@ async function fetchDirect(url){
   const r=await fetch(url,{method:'GET',mode:'cors',credentials:'omit',redirect:'follow',headers:{'Accept':'text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.5'}});
   if(!r.ok) throw new Error(`HTTP ${r.status}`); return await r.text();
 }
-async function fetchProxy(url){
+function alternatePublicUrl(url){
+  try{
+    const u=new URL(url);
+    if(/(^|\.)twidouga\.net$/i.test(u.hostname)&&/^\/jp\/ranking\/?$/i.test(u.pathname)){
+      u.pathname='/jp/ranking_t1.php'; u.search=''; u.hash=''; return u.href;
+    }
+  }catch{}
+  return '';
+}
+function workerErrorMessage(status,errorCode,upstreamStatus,finalUrl){
+  if(errorCode==='worker-key'||status===401) return 'Workerキーが一致していません。設定のWorkerキーを確認してください。';
+  if(errorCode==='target-blocked') return 'Workerの安全設定でこのURLへの接続を拒否しました。';
+  if(errorCode==='upstream-network') return 'Workerから取得先サイトへ接続できませんでした。';
+  if(errorCode==='upstream-http'||upstreamStatus){
+    const code=Number(upstreamStatus||status);
+    if(code===403) return `取得先サイトがWorker経由のアクセスをHTTP 403で拒否しました${finalUrl?`（${finalUrl}）`:''}。`;
+    if(code===429) return '取得先サイトがアクセス頻度を制限しています（HTTP 429）。時間を空けて再試行してください。';
+    return `取得先サイトがHTTP ${code}を返しました${finalUrl?`（${finalUrl}）`:''}。`;
+  }
+  return `Worker HTTP ${status}`;
+}
+async function fetchProxyOnce(url){
   const base=state.settings.proxyUrl.trim().replace(/\/+$/,''); if(!base) throw new Error('Worker URLが未設定です');
   const u=new URL(base); u.searchParams.set('url',url); if(state.settings.proxyKey) u.searchParams.set('key',state.settings.proxyKey);
-  const r=await fetch(u.href,{credentials:'omit'}); if(!r.ok) throw new Error(`Worker HTTP ${r.status}`); return await r.text();
+  const r=await fetch(u.href,{credentials:'omit'});
+  if(!r.ok){
+    const errorCode=r.headers.get('X-MyMelter-Error')||'';
+    const upstreamStatus=r.headers.get('X-MyMelter-Upstream-Status')||'';
+    const finalUrl=r.headers.get('X-MyMelter-Final-URL')||'';
+    const err=new Error(workerErrorMessage(r.status,errorCode,upstreamStatus,finalUrl));
+    err.status=r.status; err.errorCode=errorCode; err.upstreamStatus=Number(upstreamStatus||0); err.finalUrl=finalUrl; throw err;
+  }
+  return await r.text();
+}
+async function fetchProxy(url){
+  try{return await fetchProxyOnce(url);}
+  catch(err){
+    const alt=alternatePublicUrl(url);
+    const isUpstream403=Number(err.upstreamStatus||err.status)===403&&(err.errorCode==='upstream-http'||!err.errorCode);
+    if(alt&&isUpstream403){
+      try{
+        const text=await fetchProxyOnce(alt);
+        toast('元URLが403のため、公開ランキング実ページへ切り替えました');
+        return text;
+      }catch(altErr){
+        const e=new Error(`${err.message} 代替URL（${alt}）も取得できませんでした: ${altErr.message}`);
+        e.status=altErr.status; e.errorCode=altErr.errorCode; e.upstreamStatus=altErr.upstreamStatus; throw e;
+      }
+    }
+    throw err;
+  }
 }
 async function fetchText(url){
   const mode=state.settings.fetchMode||'auto';
   if(mode==='direct') return fetchDirect(url);
   if(mode==='proxy') return fetchProxy(url);
-  try{return await fetchDirect(url);}catch(directErr){ if(!state.settings.proxyUrl) throw new Error(`直接取得失敗: ${directErr.message}。設定で無料Workerを登録すると対応範囲が広がります。`); try{return await fetchProxy(url);}catch(proxyErr){throw new Error(`直接取得: ${directErr.message} / Worker: ${proxyErr.message}`);} }
+  try{return await fetchDirect(url);}catch(directErr){
+    if(!state.settings.proxyUrl) throw new Error(`直接取得失敗: ${directErr.message}。設定で無料Workerを登録すると対応範囲が広がります。`);
+    try{return await fetchProxy(url);}catch(proxyErr){throw new Error(`直接取得: ${directErr.message} / Worker: ${proxyErr.message}`);}
+  }
 }
 
 function parseMaybeXml(text){
