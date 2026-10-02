@@ -1,4 +1,4 @@
-const APP_VERSION = '1.0.0-COMPLETE';
+const APP_VERSION = '1.1.0-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -7,6 +7,15 @@ const defaultState = {
   candidates: [],
   history: [],
   saved: [],
+  catalog: [],
+  collections: [],
+  positions: {},
+  ui: {
+    rankingMode: 'new',
+    activeCollection: 'all',
+    channelSort: 'recent',
+    savedSort: 'recent'
+  },
   settings: {
     fetchMode: 'auto',
     proxyUrl: '',
@@ -24,6 +33,9 @@ let activeItems = [];
 let activeReaderMode = 'list';
 let activeEditId = null;
 let toastTimer = null;
+let currentRankingItems = [];
+let activeCollectionItemUrl = '';
+let feedSeenUrls = new Set();
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -43,6 +55,34 @@ function mediaKind(item){ if(item.videoUrl) return 'video'; if(item.image) retur
 function uniqueBy(arr, keyFn){ const seen=new Set(); return arr.filter(x=>{const k=keyFn(x); if(!k||seen.has(k)) return false; seen.add(k); return true;}); }
 function isMediaUrl(url=''){ return /\.(mp4|m4v|mov|webm|m3u8)(?:$|[?#])/i.test(url); }
 function isImageUrl(url=''){ return /\.(jpe?g|png|gif|webp|avif)(?:$|[?#])/i.test(url); }
+function fmtDuration(seconds){ const n=Math.max(0,Math.floor(Number(seconds)||0)); const m=Math.floor(n/60); const sec=String(n%60).padStart(2,'0'); return `${m}:${sec}`; }
+function itemStamp(item){ return Number(item?.publishedAt||item?.firstSeenAt||item?.lastSeenAt||item?.visitedAt||item?.savedAt||0); }
+function isSavedUrl(url){ return !!url&&state.saved.some(x=>x.url===url); }
+function combinedItems(){
+  const map=new Map();
+  for(const x of [...state.catalog,...state.history,...state.saved]){
+    if(!x?.url) continue;
+    const prev=map.get(x.url)||{};
+    map.set(x.url,{...prev,...x,viewCount:Math.max(Number(prev.viewCount||0),Number(x.viewCount||0))});
+  }
+  return [...map.values()];
+}
+function rememberItems(items){
+  const map=new Map(state.catalog.map(x=>[x.url,x])); const now=Date.now();
+  items.forEach((item,pos)=>{
+    if(!item?.url)return;
+    const prev=map.get(item.url)||{};
+    map.set(item.url,{...prev,...item,firstSeenAt:prev.firstSeenAt||Math.max(1,now-pos),lastSeenAt:now,viewCount:Number(prev.viewCount||0)});
+  });
+  state.catalog=[...map.values()].sort((a,b)=>(b.lastSeenAt||0)-(a.lastSeenAt||0)).slice(0,800);
+}
+function bumpCatalogView(item,viewCount){
+  if(!item?.url)return;
+  const idx=state.catalog.findIndex(x=>x.url===item.url); const now=Date.now();
+  const next={...(idx>=0?state.catalog[idx]:{}),...item,firstSeenAt:idx>=0?(state.catalog[idx].firstSeenAt||now):now,lastSeenAt:now,lastViewedAt:now,viewCount};
+  if(idx>=0) state.catalog[idx]=next; else state.catalog.unshift(next);
+  state.catalog=state.catalog.slice(0,800);
+}
 
 function toast(msg){
   const el=$('#toast'); el.textContent=msg; el.classList.add('show');
@@ -60,7 +100,11 @@ function loadState(){
         channels:Array.isArray(current.channels)?current.channels:[],
         candidates:Array.isArray(current.candidates)?current.candidates:[],
         history:Array.isArray(current.history)?current.history:[],
-        saved:Array.isArray(current.saved)?current.saved:[]
+        saved:Array.isArray(current.saved)?current.saved:[],
+        catalog:Array.isArray(current.catalog)?current.catalog:[],
+        collections:Array.isArray(current.collections)?current.collections:[],
+        positions:current.positions&&typeof current.positions==='object'?current.positions:{},
+        ui:{...defaultState.ui,...(current.ui||{})}
       };
     }
     const old = JSON.parse(localStorage.getItem(OLD_STORE_KEY) || 'null');
@@ -130,11 +174,39 @@ function renderStrip(root, items, kind){
   if(!items.length){ root.innerHTML=`<div class="empty-card">${kind==='recent'?'まだ閲覧履歴がありません。':'まだ保存した項目がありません。'}</div>`; return; }
   root.innerHTML=items.slice(0,12).map((x,i)=>`<button class="media-card" data-${kind}-index="${i}">${thumbHTML(x)}<strong>${esc(x.title||'無題')}</strong><small>${esc(x.channelName||domainOf(x.url)||typeLabel(mediaKind(x)))}</small></button>`).join('');
 }
-function renderHome(){ renderHomeChannels(); renderCandidates(); renderStrip($('#recentStrip'),state.history,'recent'); renderStrip($('#savedStrip'),state.saved,'saved'); }
+function getRankingItems(mode=state.ui.rankingMode){
+  let items=combinedItems();
+  if(mode==='saved'){
+    const savedMap=new Map(state.saved.map(x=>[x.url,x]));
+    items=items.filter(x=>savedMap.has(x.url)).map(x=>({...x,savedAt:savedMap.get(x.url)?.savedAt||x.savedAt||0})).sort((a,b)=>(b.savedAt||0)-(a.savedAt||0));
+  }else if(mode==='frequent'){
+    items=items.sort((a,b)=>(Number(b.viewCount||0)-Number(a.viewCount||0))||((b.lastViewedAt||b.visitedAt||0)-(a.lastViewedAt||a.visitedAt||0)));
+  }else{
+    items=items.sort((a,b)=>itemStamp(b)-itemStamp(a));
+  }
+  return items.slice(0,8);
+}
+function renderRanking(){
+  const mode=state.ui.rankingMode||'new';
+  document.querySelectorAll('#rankingTabs [data-ranking-mode]').forEach(b=>b.classList.toggle('active',b.dataset.rankingMode===mode));
+  currentRankingItems=getRankingItems(mode);
+  const root=$('#rankingGrid');
+  if(!currentRankingItems.length){
+    root.innerHTML=`<div class="empty-card ranking-empty">${mode==='saved'?'保存すると、ここにお気に入りが並びます。':'チャンネルを開くと、取得した項目がここに並びます。'}</div>`;
+    return;
+  }
+  root.innerHTML=currentRankingItems.map((x,i)=>{
+    const meta=mode==='frequent'?`${Number(x.viewCount||0)}回閲覧`:mode==='saved'?`保存 ${fmtDate(x.savedAt)}`:(itemStamp(x)?fmtDate(itemStamp(x)):'新着');
+    return `<button class="rank-card" data-ranking-index="${i}"><span class="rank-number">${i+1}</span>${thumbHTML(x,'rank-thumb')}<span class="rank-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(x.channelName||domainOf(x.url)||typeLabel(mediaKind(x)))}</small><span class="rank-meta">${esc(meta)}${isSavedUrl(x.url)?' · ♥ 保存済み':''}</span></span></button>`;
+  }).join('');
+}
+function renderHome(){ renderHomeChannels(); renderRanking(); renderCandidates(); renderStrip($('#recentStrip'),state.history,'recent'); renderStrip($('#savedStrip'),state.saved,'saved'); }
 
 function renderChannelManager(){
-  const q=$('#channelFilter').value.trim().toLowerCase(); const type=$('#channelTypeFilter').value;
+  const q=$('#channelFilter').value.trim().toLowerCase(); const type=$('#channelTypeFilter').value; const sort=state.ui.channelSort||'recent';
+  if($('#channelSort')) $('#channelSort').value=sort;
   const list=state.channels.filter(c=>(type==='all'||c.type===type)&&(!q||`${c.name} ${c.url}`.toLowerCase().includes(q)));
+  list.sort((a,b)=>sort==='name'?String(a.name||'').localeCompare(String(b.name||''),'ja'):sort==='added'?(b.createdAt||0)-(a.createdAt||0):sort==='updated'?(b.updatedAt||0)-(a.updatedAt||0):((b.lastOpenedAt||0)-(a.lastOpenedAt||0)||((b.createdAt||0)-(a.createdAt||0))));
   const root=$('#channelManager');
   if(!list.length){root.innerHTML=`<div class="empty-card">条件に一致するチャンネルがありません。</div>`;return;}
   root.innerHTML=list.map(c=>`
@@ -148,13 +220,57 @@ function colorCss(color){ return ({blue:'linear-gradient(135deg,#1677ff,#57a5ff)
 
 function libraryItemHTML(x,index,kind){
   const thumb=x.image?`<img class="library-thumb" src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="library-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
-  return `<article class="library-item">${thumb}<div class="library-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(x.channelName||domainOf(x.url))} ${x.visitedAt?`· ${esc(fmtDate(x.visitedAt))}`:''}</small></div><div class="library-actions"><button class="icon-action" data-open-library="${kind}:${index}">開く</button>${kind==='saved'?`<button class="icon-action" data-remove-saved="${index}">削除</button>`:`<button class="icon-action" data-save-history="${index}">保存</button>`}</div></article>`;
+  const pos=Number(state.positions[x.videoUrl||x.url]||0); const details=[];
+  if(x.visitedAt) details.push(fmtDate(x.visitedAt)); if(Number(x.viewCount||0)>1) details.push(`${Number(x.viewCount)}回閲覧`); if(pos>1) details.push(`続き ${fmtDuration(pos)}`);
+  return `<article class="library-item">${thumb}<div class="library-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(x.channelName||domainOf(x.url))}${details.length?` · ${esc(details.join(' · '))}`:''}</small></div><div class="library-actions"><button class="icon-action" data-open-library="${kind}:${index}">開く</button>${kind==='saved'?`<button class="icon-action" data-collection-item="${index}">リスト</button><button class="icon-action" data-remove-saved="${index}">削除</button>`:`<button class="icon-action" data-save-history="${index}">保存</button>`}</div></article>`;
 }
 function renderHistory(){ const root=$('#historyList'); root.innerHTML=state.history.length?state.history.map((x,i)=>libraryItemHTML(x,i,'history')).join(''):`<div class="empty-card">履歴はまだありません。</div>`; }
+function collectionCount(c){ return (c.itemUrls||[]).filter(url=>isSavedUrl(url)).length; }
+function renderCollections(){
+  const root=$('#collectionTabs'); if(!root)return;
+  if(state.ui.activeCollection!=='all'&&!state.collections.some(c=>c.id===state.ui.activeCollection)) state.ui.activeCollection='all';
+  root.innerHTML=`<button class="collection-chip ${state.ui.activeCollection==='all'?'active':''}" data-collection-filter="all">すべて <span>${state.saved.length}</span></button>`+
+    state.collections.map(c=>`<button class="collection-chip ${state.ui.activeCollection===c.id?'active':''}" data-collection-filter="${esc(c.id)}">${esc(c.name)} <span>${collectionCount(c)}</span></button>`).join('');
+}
 function renderSaved(){
-  const q=$('#savedFilter').value.trim().toLowerCase(); const type=$('#savedTypeFilter').value;
-  const filtered=state.saved.map((x,i)=>({...x,_index:i})).filter(x=>(type==='all'||mediaKind(x)===type)&&(!q||`${x.title} ${x.url}`.toLowerCase().includes(q)));
-  $('#savedList').innerHTML=filtered.length?filtered.map(x=>libraryItemHTML(x,x._index,'saved')).join(''):`<div class="empty-card">保存済みはまだありません。</div>`;
+  renderCollections();
+  const q=$('#savedFilter').value.trim().toLowerCase(); const type=$('#savedTypeFilter').value; const sort=state.ui.savedSort||'recent';
+  if($('#savedSort')) $('#savedSort').value=sort;
+  const active=state.ui.activeCollection||'all'; const collection=active==='all'?null:state.collections.find(c=>c.id===active); const allowed=collection?new Set(collection.itemUrls||[]):null;
+  const filtered=state.saved.map((x,i)=>({...x,_index:i})).filter(x=>(!allowed||allowed.has(x.url))&&(type==='all'||mediaKind(x)===type)&&(!q||`${x.title} ${x.url}`.toLowerCase().includes(q)));
+  filtered.sort((a,b)=>sort==='title'?String(a.title||'').localeCompare(String(b.title||''),'ja'):sort==='frequent'?(Number(b.viewCount||0)-Number(a.viewCount||0)):sort==='new'?(itemStamp(b)-itemStamp(a)):((b.savedAt||0)-(a.savedAt||0)));
+  $('#savedList').innerHTML=filtered.length?filtered.map(x=>libraryItemHTML(x,x._index,'saved')).join(''):`<div class="empty-card">この条件の保存済み項目はありません。</div>`;
+}
+function renderCollectionChooser(){
+  const root=$('#collectionChooser'); if(!root)return;
+  if(!state.collections.length){root.innerHTML=`<div class="empty-card">まだリストがありません。上で名前を入力して作成できます。</div>`;return;}
+  root.innerHTML=state.collections.map(c=>{
+    const selected=!!activeCollectionItemUrl&&(c.itemUrls||[]).includes(activeCollectionItemUrl);
+    return `<article class="collection-manage-row"><button class="collection-main ${selected?'selected':''}" data-toggle-collection="${esc(c.id)}" ${activeCollectionItemUrl?'':'disabled'}><span><strong>${esc(c.name)}</strong><small>${collectionCount(c)}件</small></span><b>${activeCollectionItemUrl?(selected?'✓':'＋'):'—'}</b></button><button class="collection-delete" data-delete-collection="${esc(c.id)}" aria-label="${esc(c.name)}を削除">×</button></article>`;
+  }).join('');
+}
+function openCollectionDialog(item=null){
+  activeCollectionItemUrl=item?.url||''; $('#collectionDialogTitle').textContent=item?'リストに追加':'リスト管理'; $('#collectionNameInput').value=''; renderCollectionChooser(); $('#collectionDialog').showModal();
+}
+function createCollection(){
+  const name=$('#collectionNameInput').value.trim(); if(!name){toast('リスト名を入力してください');return;}
+  if(state.collections.some(c=>c.name.toLowerCase()===name.toLowerCase())){toast('同じ名前のリストがあります');return;}
+  const c={id:uid(),name,itemUrls:activeCollectionItemUrl?[activeCollectionItemUrl]:[],createdAt:Date.now()}; state.collections.unshift(c); state.ui.activeCollection=c.id;
+  saveState(false); renderSaved(); renderCollectionChooser(); $('#collectionNameInput').value=''; toast(`「${name}」を作成しました`);
+}
+function toggleCollection(id){
+  if(!activeCollectionItemUrl)return; const c=state.collections.find(x=>x.id===id); if(!c)return; c.itemUrls=Array.isArray(c.itemUrls)?c.itemUrls:[];
+  c.itemUrls=c.itemUrls.includes(activeCollectionItemUrl)?c.itemUrls.filter(x=>x!==activeCollectionItemUrl):[activeCollectionItemUrl,...c.itemUrls];
+  saveState(false); renderSaved(); renderCollectionChooser();
+}
+function deleteCollection(id){
+  const c=state.collections.find(x=>x.id===id); if(!c)return;
+  if(!confirm(`「${c.name}」を削除しますか？\n保存済みの項目そのものは削除されません。`))return;
+  state.collections=state.collections.filter(x=>x.id!==id); if(state.ui.activeCollection===id)state.ui.activeCollection='all'; saveState(false); renderSaved(); renderCollectionChooser();
+}
+function removeSavedAt(index){
+  const removed=state.saved[index]; if(!removed)return; state.saved.splice(index,1);
+  state.collections.forEach(c=>c.itemUrls=(c.itemUrls||[]).filter(url=>url!==removed.url)); saveState();
 }
 function renderSettings(){
   $('#fetchMode').value=state.settings.fetchMode; $('#proxyUrl').value=state.settings.proxyUrl; $('#proxyKey').value=state.settings.proxyKey;
@@ -189,16 +305,79 @@ async function fetchDirect(url){
   const r=await fetch(url,{method:'GET',mode:'cors',credentials:'omit',redirect:'follow',headers:{'Accept':'text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.5'}});
   if(!r.ok) throw new Error(`HTTP ${r.status}`); return await r.text();
 }
-async function fetchProxy(url){
+function alternatePublicUrl(url){
+  try{
+    const u=new URL(url);
+    if(/(^|\.)twidouga\.net$/i.test(u.hostname)&&/^\/jp\/ranking\/?$/i.test(u.pathname)){
+      u.pathname='/jp/ranking_t1.php'; u.search=''; u.hash=''; return u.href;
+    }
+  }catch{}
+  return '';
+}
+function workerErrorMessage(status,errorCode,upstreamStatus,finalUrl){
+  if(errorCode==='worker-key'||status===401) return 'Workerキーが一致していません。設定のWorkerキーを確認してください。';
+  if(errorCode==='target-blocked') return 'Workerの安全設定でこのURLへの接続を拒否しました。';
+  if(errorCode==='upstream-network') return 'Workerから取得先サイトへ接続できませんでした。';
+  if(errorCode==='upstream-http'||upstreamStatus){
+    const code=Number(upstreamStatus||status);
+    if(code===403) return `取得先サイトがWorker経由のアクセスをHTTP 403で拒否しました${finalUrl?`（${finalUrl}）`:''}。`;
+    if(code===429) return '取得先サイトがアクセス頻度を制限しています（HTTP 429）。時間を空けて再試行してください。';
+    return `取得先サイトがHTTP ${code}を返しました${finalUrl?`（${finalUrl}）`:''}。`;
+  }
+  return `Worker HTTP ${status}`;
+}
+async function fetchProxyOnce(url){
   const base=state.settings.proxyUrl.trim().replace(/\/+$/,''); if(!base) throw new Error('Worker URLが未設定です');
   const u=new URL(base); u.searchParams.set('url',url); if(state.settings.proxyKey) u.searchParams.set('key',state.settings.proxyKey);
-  const r=await fetch(u.href,{credentials:'omit'}); if(!r.ok) throw new Error(`Worker HTTP ${r.status}`); return await r.text();
+  const r=await fetch(u.href,{credentials:'omit'});
+  if(!r.ok){
+    const errorCode=r.headers.get('X-MyMelter-Error')||'';
+    const upstreamStatus=r.headers.get('X-MyMelter-Upstream-Status')||'';
+    const finalUrl=r.headers.get('X-MyMelter-Final-URL')||'';
+    const err=new Error(workerErrorMessage(r.status,errorCode,upstreamStatus,finalUrl));
+    err.status=r.status; err.errorCode=errorCode; err.upstreamStatus=Number(upstreamStatus||0); err.finalUrl=finalUrl; throw err;
+  }
+  return await r.text();
+}
+async function testWorkerConnection(){
+  const status=$('#workerTestStatus'); const base=state.settings.proxyUrl.trim().replace(/\/+$/,'');
+  if(!base){status.textContent='Worker URLが未設定です。';return;}
+  status.textContent='Workerへ接続しています…'; $('#workerTestBtn').disabled=true;
+  try{
+    const u=new URL(base); u.searchParams.set('url','https://example.com/'); if(state.settings.proxyKey)u.searchParams.set('key',state.settings.proxyKey);
+    const r=await fetch(u.href,{credentials:'omit'}); const version=r.headers.get('X-MyMelter-Worker-Version')||'旧版/不明'; const errorCode=r.headers.get('X-MyMelter-Error')||'';
+    if(r.ok) status.textContent=`接続PASS · Worker ${version}${version==='1.1'?' · 403診断対応':''}`;
+    else status.textContent=`接続できましたが HTTP ${r.status} · Worker ${version}${errorCode?` · ${errorCode}`:''}`;
+  }catch(e){status.textContent=`接続FAIL：${e.message}`;}
+  finally{$('#workerTestBtn').disabled=false;}
+}
+
+async function fetchProxy(url){
+  try{return await fetchProxyOnce(url);}
+  catch(err){
+    const alt=alternatePublicUrl(url);
+    const isUpstream403=Number(err.upstreamStatus||err.status)===403&&(err.errorCode==='upstream-http'||!err.errorCode);
+    if(alt&&isUpstream403){
+      try{
+        const text=await fetchProxyOnce(alt);
+        toast('元URLが403のため、公開ランキング実ページへ切り替えました');
+        return text;
+      }catch(altErr){
+        const e=new Error(`${err.message} 代替URL（${alt}）も取得できませんでした: ${altErr.message}`);
+        e.status=altErr.status; e.errorCode=altErr.errorCode; e.upstreamStatus=altErr.upstreamStatus; throw e;
+      }
+    }
+    throw err;
+  }
 }
 async function fetchText(url){
   const mode=state.settings.fetchMode||'auto';
   if(mode==='direct') return fetchDirect(url);
   if(mode==='proxy') return fetchProxy(url);
-  try{return await fetchDirect(url);}catch(directErr){ if(!state.settings.proxyUrl) throw new Error(`直接取得失敗: ${directErr.message}。設定で無料Workerを登録すると対応範囲が広がります。`); try{return await fetchProxy(url);}catch(proxyErr){throw new Error(`直接取得: ${directErr.message} / Worker: ${proxyErr.message}`);} }
+  try{return await fetchDirect(url);}catch(directErr){
+    if(!state.settings.proxyUrl) throw new Error(`直接取得失敗: ${directErr.message}。設定で無料Workerを登録すると対応範囲が広がります。`);
+    try{return await fetchProxy(url);}catch(proxyErr){throw new Error(`直接取得: ${directErr.message} / Worker: ${proxyErr.message}`);}
+  }
 }
 
 function parseMaybeXml(text){
@@ -228,7 +407,8 @@ function parseFeed(xml,channel,baseUrl){
     if(/^video\//i.test(encType)||isMediaUrl(mediaUrl)) videoUrl=absoluteUrl(mediaUrl,baseUrl); else if(/^image\//i.test(encType)||isImageUrl(mediaUrl)) image=absoluteUrl(mediaUrl,baseUrl);
     if(!image){ const html=nodeText(entry,['description','summary','content']); if(html){const d=new DOMParser().parseFromString(html,'text/html'); image=absoluteUrl(d.querySelector('img')?.getAttribute('src')||'',baseUrl);} }
     link=absoluteUrl(link||mediaUrl,baseUrl);
-    return {id:uid(),title,url:link,image,videoUrl,type:videoUrl?'video':image?'image':'article',channelId:channel.id,channelName:channel.name};
+    const publishedRaw=nodeText(entry,['pubDate','published','updated','date']); const publishedAt=Date.parse(publishedRaw)||0;
+    return {id:uid(),title,url:link,image,videoUrl,type:videoUrl?'video':image?'image':'article',channelId:channel.id,channelName:channel.name,publishedAt};
   }).filter(x=>x.url);
 }
 function parseSitemap(xml,channel){
@@ -252,7 +432,8 @@ function parseHtml(text,channel,baseUrl){
     link=absoluteUrl(link,baseUrl); image=absoluteUrl(image,baseUrl); videoUrl=absoluteUrl(videoUrl,baseUrl);
     if(!videoUrl&&isMediaUrl(link)) videoUrl=link; if(!image&&isImageUrl(link)) image=link;
     let type=videoUrl?'video':image?'image':'article'; if(channel.type!=='mixed'&&channel.type!=='feed') type=channel.type;
-    return {id:uid(),title:title.replace(/\s+/g,' ').trim().slice(0,300),url:link,image,videoUrl,type,channelId:channel.id,channelName:channel.name};
+    const timeEl=node.querySelector?.('time[datetime], [data-date], [data-published]'); const publishedRaw=timeEl?.getAttribute?.('datetime')||timeEl?.getAttribute?.('data-date')||timeEl?.getAttribute?.('data-published')||''; const publishedAt=Date.parse(publishedRaw)||0;
+    return {id:uid(),title:title.replace(/\s+/g,' ').trim().slice(0,300),url:link,image,videoUrl,type,channelId:channel.id,channelName:channel.name,publishedAt};
   }).filter(x=>x.url&&x.title);
   return uniqueBy(items,x=>x.url).slice(0,160);
 }
@@ -337,7 +518,7 @@ async function openChannel(channel,keyword=''){
   try{
     const text=await fetchText(url); let items=parseChannelContent(text,channel,url);
     if(keyword&&!channel.searchUrl){const q=keyword.toLowerCase();items=items.filter(x=>(x.title||'').toLowerCase().includes(q));}
-    activeItems=items; channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); channel.updatedAt=Date.now(); saveState(false); renderHomeChannels(); renderChannelManager();
+    activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); channel.updatedAt=Date.now(); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
     $('#readerStatus').textContent=items.length?`${items.length}件取得 · ${domainOf(url)}`:'項目を抽出できませんでした。高度な抽出設定を調整してください。';
     renderReader();
   }catch(e){ $('#readerStatus').textContent=`取得できませんでした：${e.message}`; $('#readerContent').innerHTML=`<div class="empty-card"><strong>取得エラー</strong><br>${esc(e.message)}<br><br><button class="primary" data-open-url="${esc(url)}">サイトを直接開く</button></div>`; }
@@ -363,8 +544,16 @@ function gridItemHTML(x,i){
   const media=x.image?`<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:x.videoUrl?`<video src="${esc(x.videoUrl)}" muted playsinline preload="metadata"></video>`:`<div class="content-placeholder" style="width:100%;aspect-ratio:1/1">◇</div>`;
   return `<article class="grid-card">${media}<div class="grid-copy"><strong>${esc(x.title||'無題')}</strong><div class="grid-actions"><button data-active-open="${i}">開く</button><button data-active-save="${i}">保存</button><button data-active-quick-save="${i}">端末へ</button></div></div></article>`;
 }
-function recordHistory(item){ if(!item?.url)return; const entry={...item,visitedAt:Date.now()}; state.history=[entry,...state.history.filter(x=>x.url!==entry.url)].slice(0,500); saveState(); }
-function saveItem(item){ if(!item?.url)return; state.saved=[{...item,savedAt:Date.now()},...state.saved.filter(x=>x.url!==item.url)].slice(0,500); saveState(); toast('保存済みに追加しました'); }
+function recordHistory(item,render=true){
+  if(!item?.url)return;
+  const prev=state.history.find(x=>x.url===item.url); const cat=state.catalog.find(x=>x.url===item.url); const viewCount=Math.max(Number(prev?.viewCount||0),Number(cat?.viewCount||0))+1;
+  const entry={...(prev||{}),...item,visitedAt:Date.now(),lastViewedAt:Date.now(),viewCount}; state.history=[entry,...state.history.filter(x=>x.url!==entry.url)].slice(0,500); bumpCatalogView(entry,viewCount); saveState(render);
+}
+function saveItem(item){
+  if(!item?.url)return; const prev=state.saved.find(x=>x.url===item.url); const cat=state.catalog.find(x=>x.url===item.url);
+  const entry={...(prev||{}),...(cat||{}),...item,savedAt:Date.now(),viewCount:Math.max(Number(item.viewCount||0),Number(cat?.viewCount||0),Number(prev?.viewCount||0))};
+  state.saved=[entry,...state.saved.filter(x=>x.url!==item.url)].slice(0,500); if(!cat)rememberItems([entry]); saveState(); toast('保存済みに追加しました');
+}
 function openItem(item){ if(!item?.url)return; recordHistory(item); window.open(item.url,'_blank','noopener'); }
 
 async function quickSave(item){
@@ -381,23 +570,36 @@ async function quickSave(item){
 
 function openVideoFeed(){
   const vids=activeItems.filter(x=>x.videoUrl||x.type==='video'); if(!vids.length){toast('直接再生できる動画がありません');return;}
-  $('#videoFeedTitle').textContent=activeChannel?.name||'動画';
+  feedSeenUrls=new Set(); $('#videoFeedTitle').textContent=activeChannel?.name||'動画';
   $('#videoFeed').innerHTML=vids.map((x,i)=>videoSlideHTML(x,i)).join(''); $('#videoFeedDialog').showModal();
   setupVideoAutoplay();
 }
 function videoSlideHTML(x,i){
-  const src=x.videoUrl||''; const poster=x.image||'';
+  const src=x.videoUrl||''; const poster=x.image||''; const saved=isSavedUrl(x.url);
   const media=src?`<video src="${esc(src)}" ${poster?`poster="${esc(poster)}"`:''} controls playsinline muted loop preload="metadata"></video>`:`<div class="video-fallback"><div><strong>この動画はページ側で再生します</strong><br><br><button class="primary" data-feed-open="${i}">元ページを開く</button></div></div>`;
-  return `<section class="video-slide" data-feed-index="${i}">${media}<div class="video-overlay"><strong>${esc(x.title||'動画')}</strong><small>${esc(x.channelName||domainOf(x.url))}</small></div><div class="video-actions"><button class="video-action" data-feed-quick-save="${i}"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="${i}"><span class="circle">♡</span><span>保存済み</span></button><button class="video-action" data-feed-open="${i}"><span class="circle">↗</span><span>元ページ</span></button></div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>`;
+  return `<section class="video-slide" data-feed-index="${i}">${media}<div class="video-overlay"><strong>${esc(x.title||'動画')}</strong><small>${esc(x.channelName||domainOf(x.url))}</small></div><div class="video-actions"><button class="video-action" data-feed-quick-save="${i}"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="${i}"><span class="circle">${saved?'♥':'♡'}</span><span>${saved?'保存済み':'保存'}</span></button><button class="video-action" data-feed-open="${i}"><span class="circle">↗</span><span>元ページ</span></button></div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>`;
 }
 function setupVideoAutoplay(){
-  const videos=$$('#videoFeed video'); const obs=new IntersectionObserver(entries=>entries.forEach(e=>{const v=e.target;if(e.isIntersecting&&e.intersectionRatio>.72){v.play().catch(()=>{});}else{v.pause();}}),{root:$('#videoFeed'),threshold:[.72]}); videos.forEach(v=>obs.observe(v));
+  const feed=$('#videoFeed'); const vids=activeItems.filter(x=>x.videoUrl||x.type==='video'); const slides=$('.video-slide',feed);
+  slides.forEach(slide=>{
+    const idx=Number(slide.dataset.feedIndex); const item=vids[idx]; const v=slide.querySelector('video'); if(!v||!item)return; const key=item.videoUrl||item.url;
+    v.addEventListener('loadedmetadata',()=>{const pos=Number(state.positions[key]||0);if(pos>1&&Number.isFinite(v.duration)&&pos<v.duration-2){try{v.currentTime=pos;}catch{}}},{once:true});
+    const keep=()=>{if(!Number.isFinite(v.duration))return; if(v.currentTime>1&&v.currentTime<v.duration-2)state.positions[key]=Math.floor(v.currentTime);else delete state.positions[key];saveState(false);};
+    v.addEventListener('pause',keep); v.addEventListener('ended',()=>{delete state.positions[key];saveState(false);});
+  });
+  const obs=new IntersectionObserver(entries=>entries.forEach(e=>{
+    const slide=e.target; const idx=Number(slide.dataset.feedIndex); const item=vids[idx]; const v=slide.querySelector('video');
+    if(e.isIntersecting&&e.intersectionRatio>.72){
+      if(item?.url&&!feedSeenUrls.has(item.url)){feedSeenUrls.add(item.url);recordHistory(item,false);}
+      v?.play().catch(()=>{});
+    }else v?.pause();
+  }),{root:feed,threshold:[.72]}); slides.forEach(slide=>obs.observe(slide));
 }
 
 function openSearchResults(q){
   const needle=q.trim().toLowerCase(); if(!needle)return;
   const channels=state.channels.filter(c=>`${c.name} ${c.url}`.toLowerCase().includes(needle)).slice(0,20);
-  const items=uniqueBy([...state.history,...state.saved],x=>x.url).filter(x=>`${x.title||''} ${x.url||''}`.toLowerCase().includes(needle)).slice(0,30);
+  const items=uniqueBy([...state.catalog,...state.history,...state.saved],x=>x.url).filter(x=>`${x.title||''} ${x.url||''}`.toLowerCase().includes(needle)).slice(0,30);
   const candidates=state.candidates.filter(c=>`${c.name} ${c.url}`.toLowerCase().includes(needle)).slice(0,15);
   const section=(title,arr,fn)=>arr.length?`<section class="search-section"><h3>${title}</h3>${arr.map(fn).join('')}</section>`:'';
   $('#searchResults').innerHTML=section('チャンネル',channels,c=>`<button class="search-hit" data-open-channel="${esc(c.id)}"><span class="mini-icon">${esc(typeGlyph(c.type))}</span><span class="hit-main"><strong>${esc(c.name)}</strong><small>${esc(c.url)}</small></span></button>`)+section('履歴・保存済み',items,x=>`<button class="search-hit" data-open-url="${esc(x.url)}"><span class="mini-icon">${esc(typeGlyph(mediaKind(x)))}</span><span class="hit-main"><strong>${esc(x.title||'無題')}</strong><small>${esc(x.url)}</small></span></button>`)+section('自動検出候補',candidates,c=>`<button class="search-hit" data-add-candidate="${esc(c.id)}"><span class="mini-icon">＋</span><span class="hit-main"><strong>${esc(c.name)}</strong><small>${esc(c.url)}</small></span></button>`)||`<div class="empty-card">「${esc(q)}」に一致するデータはありません。</div>`;
@@ -408,7 +610,9 @@ function exportState(){
   const payload={app:'MyMelter',version:APP_VERSION,exportedAt:new Date().toISOString(),state}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`MyMelter_backup_${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 async function importState(file){
-  const data=JSON.parse(await file.text()); const incoming=data.state||data; state={...clone(defaultState),...incoming,settings:{...defaultState.settings,...(incoming.settings||{})},meta:{...defaultState.meta,...(incoming.meta||{})}}; state.channels=(state.channels||[]).map(normalizeChannel); state.candidates=state.candidates||[];state.history=state.history||[];state.saved=state.saved||incoming.favorites||[];saveState();
+  const data=JSON.parse(await file.text()); const incoming=data.state||data;
+  state={...clone(defaultState),...incoming,settings:{...defaultState.settings,...(incoming.settings||{})},meta:{...defaultState.meta,...(incoming.meta||{})},ui:{...defaultState.ui,...(incoming.ui||{})},positions:incoming.positions&&typeof incoming.positions==='object'?incoming.positions:{}};
+  state.channels=(state.channels||[]).map(normalizeChannel); state.candidates=state.candidates||[];state.history=state.history||[];state.saved=state.saved||incoming.favorites||[];state.catalog=state.catalog||[];state.collections=state.collections||[];saveState();
 }
 
 // Navigation and primary actions
@@ -422,7 +626,11 @@ $('#channelCloseBtn').onclick=()=>$('#channelDialog').close();
 $('#channelForm').addEventListener('submit',e=>{e.preventDefault();saveChannelFromForm();});
 $('#deleteChannelBtn').onclick=()=>{if(!activeEditId)return;if(confirm('このチャンネルを削除しますか？')){state.channels=state.channels.filter(x=>x.id!==activeEditId);saveState();$('#channelDialog').close();toast('削除しました');}};
 $('#testChannelBtn').onclick=async()=>{const c=channelFromForm();if(!c.url){toast('URLを確認してください');return;}$('#channelTestStatus').textContent='取得テスト中…';try{const t=await fetchText(c.url);const items=parseChannelContent(t,c,c.url);$('#channelTestStatus').textContent=`取得成功：${items.length}件を抽出できました。`;}catch(e){$('#channelTestStatus').textContent=`取得失敗：${e.message}`;}};
-$('#channelFilter').oninput=renderChannelManager; $('#channelTypeFilter').onchange=renderChannelManager; $('#savedFilter').oninput=renderSaved; $('#savedTypeFilter').onchange=renderSaved;
+$('#channelFilter').oninput=renderChannelManager; $('#channelTypeFilter').onchange=renderChannelManager; $('#channelSort').onchange=e=>{state.ui.channelSort=e.target.value;saveState(false);renderChannelManager();};
+$('#savedFilter').oninput=renderSaved; $('#savedTypeFilter').onchange=renderSaved; $('#savedSort').onchange=e=>{state.ui.savedSort=e.target.value;saveState(false);renderSaved();};
+$('[data-ranking-mode]').forEach(b=>b.onclick=()=>{state.ui.rankingMode=b.dataset.rankingMode;saveState(false);renderRanking();});
+$('#newCollectionBtn').onclick=()=>openCollectionDialog(); $('#collectionCloseBtn').onclick=()=>$('#collectionDialog').close(); $('#createCollectionBtn').onclick=createCollection;
+$('#collectionNameInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();createCollection();}});
 $('#clearHistoryBtn').onclick=()=>{if(confirm('閲覧履歴をすべて消去しますか？')){state.history=[];saveState();}};
 
 // Reader
@@ -442,6 +650,7 @@ $('#clearGlobalSearch').onclick=()=>{$('#globalSearch').value='';$('#clearGlobal
 $('#fetchMode').onchange=e=>{state.settings.fetchMode=e.target.value;saveState(false);};
 $('#proxyUrl').onchange=e=>{state.settings.proxyUrl=e.target.value.trim();saveState(false);};
 $('#proxyKey').onchange=e=>{state.settings.proxyKey=e.target.value;saveState(false);};
+$('#workerTestBtn').onclick=testWorkerConnection;
 $('#shortcutEnabled').onchange=e=>{state.settings.shortcutEnabled=e.target.checked;saveState(false);};
 $('#shortcutName').onchange=e=>{state.settings.shortcutName=e.target.value.trim()||'MyMelter保存';saveState(false);};
 $('#exportBtn').onclick=exportState; $('#importInput').onchange=async e=>{if(!e.target.files?.[0])return;try{await importState(e.target.files[0]);toast('バックアップを読み込みました');}catch{toast('バックアップを読み込めませんでした');}e.target.value='';};
@@ -452,6 +661,11 @@ $('#installBtn').onclick=async()=>{if(deferredInstallPrompt){deferredInstallProm
 
 // Delegated events
 document.addEventListener('click',async e=>{
+  const rank=e.target.closest('[data-ranking-index]'); if(rank){const item=currentRankingItems[Number(rank.dataset.rankingIndex)];if(item)openItem(item);return;}
+  const colFilter=e.target.closest('[data-collection-filter]'); if(colFilter){state.ui.activeCollection=colFilter.dataset.collectionFilter;saveState(false);renderSaved();return;}
+  const colItem=e.target.closest('[data-collection-item]'); if(colItem){const item=state.saved[Number(colItem.dataset.collectionItem)];if(item)openCollectionDialog(item);return;}
+  const colToggle=e.target.closest('[data-toggle-collection]'); if(colToggle){toggleCollection(colToggle.dataset.toggleCollection);return;}
+  const colDelete=e.target.closest('[data-delete-collection]'); if(colDelete){deleteCollection(colDelete.dataset.deleteCollection);return;}
   const openCh=e.target.closest('[data-open-channel]'); if(openCh){const c=state.channels.find(x=>x.id===openCh.dataset.openChannel);if(c){$('#searchDialog').open&&$('#searchDialog').close();openChannel(c);}return;}
   const editCh=e.target.closest('[data-edit-channel]'); if(editCh){const c=state.channels.find(x=>x.id===editCh.dataset.editChannel);if(c)openChannelEditor(c);return;}
   const addC=e.target.closest('[data-add-candidate]'); if(addC){addCandidate(addC.dataset.addCandidate);return;}
@@ -466,7 +680,7 @@ document.addEventListener('click',async e=>{
   const feedSave=e.target.closest('[data-feed-save]'); if(feedSave&&feedSlide){const vids=activeItems.filter(x=>x.videoUrl||x.type==='video');saveItem(vids[Number(feedSave.dataset.feedSave)]);return;}
   const feedOpen=e.target.closest('[data-feed-open]'); if(feedOpen){const vids=activeItems.filter(x=>x.videoUrl||x.type==='video');openItem(vids[Number(feedOpen.dataset.feedOpen)]);return;}
   const lib=e.target.closest('[data-open-library]'); if(lib){const [kind,idxStr]=lib.dataset.openLibrary.split(':');const arr=kind==='saved'?state.saved:state.history;openItem(arr[Number(idxStr)]);return;}
-  const rem=e.target.closest('[data-remove-saved]'); if(rem){state.saved.splice(Number(rem.dataset.removeSaved),1);saveState();return;}
+  const rem=e.target.closest('[data-remove-saved]'); if(rem){removeSavedAt(Number(rem.dataset.removeSaved));return;}
   const saveH=e.target.closest('[data-save-history]'); if(saveH){saveItem(state.history[Number(saveH.dataset.saveHistory)]);return;}
   const recent=e.target.closest('[data-recent-index]'); if(recent){openItem(state.history[Number(recent.dataset.recentIndex)]);return;}
   const saved=e.target.closest('[data-saved-index]'); if(saved){openItem(state.saved[Number(saved.dataset.savedIndex)]);return;}

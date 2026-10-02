@@ -1,4 +1,4 @@
-# MyMelter 1.0 COMPLETE 導入チェック
+# MyMelter 1.1 DISCOVER 導入チェック
 
 - [ ] ZIPを解凍した
 - [ ] GitHub公開リポジトリを作った
@@ -11,6 +11,9 @@
 - [ ] 候補を追加できた
 - [ ] チャンネルを開いて一覧取得を確認した
 - [ ] 必要なら無料Cloudflare Workerを設定した
+- [ ] Workerを `worker/worker.js` 1.1版へ更新した
+- [ ] Workerのみモードで取得テストを行い、403時に「キー不一致 / 安全ブロック / 取得先サイト拒否」が区別表示されることを確認した
+- [ ] twidouga確認時は `https://www.twidouga.net/jp/ranking_t1.php` を実ページとして試した
 - [ ] 動画チャンネルで「動画」→「縦スワイプで再生」を確認した
 - [ ] 必要ならAppleショートカット保存をONにした
 - [ ] 設定からバックアップJSONを書き出した

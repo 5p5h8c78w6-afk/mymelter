@@ -46,6 +46,19 @@
         <span><strong>チャンネルを追加</strong><small>URLを貼ると、追加候補を自動解析します</small></span>
       </button>
 
+      <section class="discover-panel" aria-labelledby="discoverRankingTitle">
+        <div class="section-title-row ranking-head">
+          <div><p class="eyebrow">DISCOVER</p><h2 id="discoverRankingTitle">発見</h2></div>
+          <span class="local-only-note">この端末の利用データ</span>
+        </div>
+        <div id="rankingTabs" class="segment-tabs" aria-label="発見の並び順">
+          <button class="active" data-ranking-mode="new">✨ 新着</button>
+          <button data-ranking-mode="frequent">🔥 よく見る</button>
+          <button data-ranking-mode="saved">♡ 保存</button>
+        </div>
+        <div id="rankingGrid" class="ranking-grid"></div>
+      </section>
+
       <div class="section-title-row rec-head">
         <div class="title-with-chip"><h2>おすすめチャンネル</h2><span class="chip">✦ 自動検出された候補</span></div>
         <button id="discoverBtn" class="link-btn">自動で探す ›</button>
@@ -86,6 +99,12 @@
           <option value="mixed">混在</option>
           <option value="feed">RSS/Atom</option>
         </select>
+        <select id="channelSort" aria-label="チャンネルの並び順">
+          <option value="recent">最近開いた順</option>
+          <option value="updated">更新順</option>
+          <option value="added">追加順</option>
+          <option value="name">名前順</option>
+        </select>
       </div>
       <div id="channelManager" class="channel-list"></div>
     </section>
@@ -100,13 +119,23 @@
 
     <section id="view-saved" class="view" data-view="saved">
       <div class="page-head"><div><p class="eyebrow">SAVED</p><h1>保存済み</h1></div></div>
-      <div class="toolbar-card">
+      <div class="collection-bar">
+        <div id="collectionTabs" class="collection-tabs" aria-label="保存リスト"></div>
+        <button id="newCollectionBtn" class="mini-primary">＋ リスト</button>
+      </div>
+      <div class="toolbar-card saved-toolbar">
         <input id="savedFilter" type="search" placeholder="保存済みを検索" />
         <select id="savedTypeFilter">
           <option value="all">すべて</option>
           <option value="video">動画</option>
           <option value="image">画像</option>
           <option value="article">記事</option>
+        </select>
+        <select id="savedSort" aria-label="保存済みの並び順">
+          <option value="recent">保存が新しい順</option>
+          <option value="new">コンテンツ新着順</option>
+          <option value="frequent">よく見る順</option>
+          <option value="title">タイトル順</option>
         </select>
       </div>
       <div id="savedList" class="library-list"></div>
@@ -126,7 +155,9 @@
         </label>
         <label class="field"><span>Cloudflare Worker URL</span><input id="proxyUrl" type="url" placeholder="https://xxxx.workers.dev" /></label>
         <label class="field"><span>Workerキー（任意）</span><input id="proxyKey" type="password" placeholder="MYMELTER_KEY" autocomplete="off" /></label>
-        <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。</p>
+        <div class="button-row"><button id="workerTestBtn" class="secondary" type="button">Worker接続テスト</button></div>
+        <div id="workerTestStatus" class="status-line"></div>
+        <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。Worker 1.1では403の原因も区別表示します。</p>
       </div>
 
       <div class="settings-group">
@@ -146,7 +177,7 @@
 
       <div class="settings-group">
         <h3>このアプリ</h3>
-        <p class="help">MyMelter PWA 1.0 COMPLETE<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
+        <p class="help">MyMelter PWA 1.1 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
       </div>
     </section>
   </main>
@@ -235,6 +266,22 @@
       </div>
       <div id="readerStatus" class="reader-status"></div>
       <div id="readerContent" class="reader-content"></div>
+    </div>
+  </dialog>
+
+  <dialog id="collectionDialog" class="sheet-dialog">
+    <div class="sheet collection-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div><p class="eyebrow">COLLECTIONS</p><h2 id="collectionDialogTitle">保存リスト</h2></div>
+        <button id="collectionCloseBtn" type="button" class="round-btn">×</button>
+      </div>
+      <div class="collection-create-row">
+        <input id="collectionNameInput" type="text" maxlength="40" placeholder="新しいリスト名" />
+        <button id="createCollectionBtn" type="button" class="primary">作成</button>
+      </div>
+      <div id="collectionChooser" class="collection-chooser"></div>
+      <p class="help">保存した項目を「あとで見る」「お気に入り」など好きなリストへ整理できます。</p>
     </div>
   </dialog>
 
