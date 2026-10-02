@@ -10,7 +10,7 @@
   <meta name="format-detection" content="telephone=no" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icons/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=1.1.3" />
+  <link rel="stylesheet" href="./styles.css?v=1.1.4" />
   <title>MyMelter</title>
 </head>
 <body>
@@ -155,8 +155,8 @@
         </label>
         <label class="field"><span>Cloudflare Worker URL</span><input id="proxyUrl" type="url" placeholder="https://xxxx.workers.dev" /></label>
         <label class="field"><span>Workerキー（任意）</span><input id="proxyKey" type="password" placeholder="MYMELTER_KEY" autocomplete="off" /></label>
-        <div class="button-row"><button id="workerTestBtn" class="secondary" type="button">Worker接続テスト</button></div>
-        <div id="workerTestStatus" class="status-line" role="status" aria-live="polite"></div>
+        <div class="button-row worker-test-row"><button id="workerTestBtn" class="secondary" type="button" onclick="return window.MyMelterWorkerTest ? window.MyMelterWorkerTest(event) : false;" onpointerup="return window.MyMelterWorkerTest ? window.MyMelterWorkerTest(event) : false;" ontouchend="return window.MyMelterWorkerTest ? window.MyMelterWorkerTest(event) : false;">Worker接続テスト</button></div>
+        <div id="workerTestStatus" class="status-line" role="status" aria-live="polite">待機中 · タップしてWorkerを確認</div>
         <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。Worker 1.1では403の原因も区別表示します。</p>
       </div>
 
@@ -177,7 +177,7 @@
 
       <div class="settings-group">
         <h3>このアプリ</h3>
-        <p class="help">MyMelter PWA 1.1.3 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
+        <p class="help">MyMelter PWA 1.1.4 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
       </div>
     </section>
   </main>
@@ -300,6 +300,6 @@
     </div>
   </dialog>
 
-  <script src="./app.js?v=1.1.3"></script>
+  <script src="./app.js?v=1.1.4"></script>
 </body>
 </html>
