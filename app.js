@@ -339,6 +339,19 @@ async function fetchProxyOnce(url){
   }
   return await r.text();
 }
+async function testWorkerConnection(){
+  const status=$('#workerTestStatus'); const base=state.settings.proxyUrl.trim().replace(/\/+$/,'');
+  if(!base){status.textContent='Worker URLが未設定です。';return;}
+  status.textContent='Workerへ接続しています…'; $('#workerTestBtn').disabled=true;
+  try{
+    const u=new URL(base); u.searchParams.set('url','https://example.com/'); if(state.settings.proxyKey)u.searchParams.set('key',state.settings.proxyKey);
+    const r=await fetch(u.href,{credentials:'omit'}); const version=r.headers.get('X-MyMelter-Worker-Version')||'旧版/不明'; const errorCode=r.headers.get('X-MyMelter-Error')||'';
+    if(r.ok) status.textContent=`接続PASS · Worker ${version}${version==='1.1'?' · 403診断対応':''}`;
+    else status.textContent=`接続できましたが HTTP ${r.status} · Worker ${version}${errorCode?` · ${errorCode}`:''}`;
+  }catch(e){status.textContent=`接続FAIL：${e.message}`;}
+  finally{$('#workerTestBtn').disabled=false;}
+}
+
 async function fetchProxy(url){
   try{return await fetchProxyOnce(url);}
   catch(err){
@@ -637,6 +650,7 @@ $('#clearGlobalSearch').onclick=()=>{$('#globalSearch').value='';$('#clearGlobal
 $('#fetchMode').onchange=e=>{state.settings.fetchMode=e.target.value;saveState(false);};
 $('#proxyUrl').onchange=e=>{state.settings.proxyUrl=e.target.value.trim();saveState(false);};
 $('#proxyKey').onchange=e=>{state.settings.proxyKey=e.target.value;saveState(false);};
+$('#workerTestBtn').onclick=testWorkerConnection;
 $('#shortcutEnabled').onchange=e=>{state.settings.shortcutEnabled=e.target.checked;saveState(false);};
 $('#shortcutName').onchange=e=>{state.settings.shortcutName=e.target.value.trim()||'MyMelter保存';saveState(false);};
 $('#exportBtn').onclick=exportState; $('#importInput').onchange=async e=>{if(!e.target.files?.[0])return;try{await importState(e.target.files[0]);toast('バックアップを読み込みました');}catch{toast('バックアップを読み込めませんでした');}e.target.value='';};
