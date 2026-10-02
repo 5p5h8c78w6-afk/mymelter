@@ -155,7 +155,9 @@
         </label>
         <label class="field"><span>Cloudflare Worker URL</span><input id="proxyUrl" type="url" placeholder="https://xxxx.workers.dev" /></label>
         <label class="field"><span>Workerキー（任意）</span><input id="proxyKey" type="password" placeholder="MYMELTER_KEY" autocomplete="off" /></label>
-        <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。</p>
+        <div class="button-row"><button id="workerTestBtn" class="secondary" type="button">Worker接続テスト</button></div>
+        <div id="workerTestStatus" class="status-line"></div>
+        <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。Worker 1.1では403の原因も区別表示します。</p>
       </div>
 
       <div class="settings-group">
