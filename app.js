@@ -1,4 +1,4 @@
-const APP_VERSION = '1.2.8-DISCOVER';
+const APP_VERSION = '1.2.9-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -582,7 +582,7 @@ while(creatorQueue.length&&creators<3&&I.length<80){
 var primary=I.slice(0,primaryEnd),deep=I.slice(primaryEnd);
 I=I.slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
 if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:9,s:location.href,n:document.title,i:primary,d:deep};
+var P={v:10,s:location.href,n:document.title,i:primary,d:deep};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -594,7 +594,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='深掘り取込 v9。現在のランキング一覧はそのまま保存し、11〜20位・週間・月間・関連ランキング・取得可能な投稿者別ページを動画タブ専用の深掘りフィードへ追加します。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='安定再生・順位固定 v10。同一動画が複数順位にある場合も順位IDを分離し、正しく対応したサムネイルだけを採用します。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -654,7 +654,7 @@ function consumeBrowserImportHash(){
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件'+(Number(payload?.v||0)<9?'（取込コードv9へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件'+(Number(payload?.v||0)<10?'（取込コードv10へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -1130,6 +1130,7 @@ document.addEventListener('click',async e=>{
   const feedQuick=e.target.closest('[data-feed-quick-save]'); if(feedQuick&&feedSlide){await quickSave(activeFeedItems[Number(feedQuick.dataset.feedQuickSave)]);return;}
   const feedSave=e.target.closest('[data-feed-save]'); if(feedSave&&feedSlide){saveItem(activeFeedItems[Number(feedSave.dataset.feedSave)]);return;}
   const feedToggle=e.target.closest('[data-feed-toggle]'); if(feedToggle){const slide=feedToggle.closest('.video-slide');const v=slide?.querySelector('video');if(v){if(v.paused)v.play().catch(()=>{});else v.pause();}return;}
+  const feedRetry=e.target.closest('[data-feed-retry]'); if(feedRetry){const i=Number(feedRetry.dataset.feedRetry),slide=feedRetry.closest('.video-slide'),v=slide?.querySelector('video');if(v){feedRoutePrefs.delete(v.dataset.directSrc||'');delete v.dataset.proxyTried;releaseFeedVideoElement(v);slide?.classList.remove('video-load-error');activateFeedIndex(i,true);}return;}
   const feedSource=e.target.closest('[data-feed-source-open]'); if(feedSource){const item=activeFeedItems[Number(feedSource.dataset.feedSourceOpen)];if(item?.url)window.open(item.url,'_blank','noopener');return;}
   const lib=e.target.closest('[data-open-library]'); if(lib){const [kind,idxStr]=lib.dataset.openLibrary.split(':');const arr=kind==='saved'?state.saved:state.history;openItem(arr[Number(idxStr)]);return;}
   const rem=e.target.closest('[data-remove-saved]'); if(rem){removeSavedAt(Number(rem.dataset.removeSaved));return;}
@@ -1149,10 +1150,23 @@ document.addEventListener('error',e=>{
 
 document.addEventListener('input',e=>{
   const seek=e.target.closest?.('[data-feed-seek]'); if(!seek)return;
+  seek.dataset.dragging='1';
   const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); if(!v||!Number.isFinite(v.duration))return;
   const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
-  try{v.currentTime=next;}catch{}
   const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
+});
+document.addEventListener('change',e=>{
+  const seek=e.target.closest?.('[data-feed-seek]'); if(!seek)return;
+  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); delete seek.dataset.dragging;
+  if(!v||!Number.isFinite(v.duration))return;
+  const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
+  slide?.classList.add('video-buffering');
+  try{
+    if(typeof v.fastSeek==='function')v.fastSeek(next);else v.currentTime=next;
+  }catch{try{v.currentTime=next;}catch{}}
+  const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
+  const done=()=>slide?.classList.remove('video-buffering');
+  v.addEventListener('seeked',done,{once:true});setTimeout(done,3500);
 });
 
 // Initial launch
