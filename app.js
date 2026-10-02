@@ -1,4 +1,4 @@
-const APP_VERSION = '1.3.4-DISCOVER';
+const APP_VERSION = '1.3.5-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -1025,12 +1025,14 @@ function clearFeedPlaybackWatchdog(){
   if(feedPlaybackWatchdog){clearInterval(feedPlaybackWatchdog);feedPlaybackWatchdog=null;}
   feedWatchdogToken++;
 }
-function resetFeedProgressWatch(v){
+function resetFeedProgressWatch(v,full=true){
   if(!v)return;
   v._watchLastTime=Number(v.currentTime)||0;
   v._watchLastAdvanceAt=Date.now();
-  v._watchKickCount=0;
-  v._watchRouteTried=false;
+  if(full){
+    v._watchRecoverStage=0;
+    v._watchRouteTried=false;
+  }
 }
 function feedShouldAutoPlay(v){
   const slide=v?.closest?.('.video-slide'),scrub=slide?.querySelector('[data-feed-scrub]');
@@ -1063,7 +1065,7 @@ function startFeedPlaybackWatchdog(){
     if(!slide||!v||!feedShouldAutoPlay(v)||slide.classList.contains('video-load-error'))return;
     const now=Date.now(),t=Number(v.currentTime)||0,prev=Number(v._watchLastTime||0);
     if(t>prev+.08){
-      v._watchLastTime=t;v._watchLastAdvanceAt=now;v._watchKickCount=0;
+      v._watchLastTime=t;v._watchLastAdvanceAt=now;v._watchRecoverStage=0;
       if(v.readyState>=2){setLoadStatus(slide,'');slide.classList.remove('video-buffering');}
       return;
     }
@@ -1071,36 +1073,51 @@ function startFeedPlaybackWatchdog(){
     const stuckFor=now-v._watchLastAdvanceAt;
     const ahead=bufferedEnd(v)-t;
     if(v.seeking)return;
-    if(v.paused&&v.dataset.shouldPlay==='1'&&v.readyState>=2&&stuckFor>650){
-      v._watchKickCount=(Number(v._watchKickCount)||0)+1;
-      await kickFeedPlayback(v,slide,ahead>.25?'読込済み・再生を再開中…':'再生を再開中…');
-      v._watchLastAdvanceAt=Date.now();
+    if(v.readyState<2||ahead<=.15)return;
+    if(stuckFor<1400)return;
+
+    const stage=Number(v._watchRecoverStage||0);
+    v._watchRecoverStage=stage+1;
+    v._watchLastAdvanceAt=Date.now();
+
+    if(stage===0){
+      await kickFeedPlayback(v,slide,'読込済み・再生を再開中…');
       return;
     }
-    if(!v.paused&&v.readyState>=2&&ahead>.25&&stuckFor>1500){
-      v._watchKickCount=(Number(v._watchKickCount)||0)+1;
-      if(v._watchKickCount<=2){
-        try{v.pause();}catch{}
-        await kickFeedPlayback(v,slide,'読込済み・再生を再開中…');
-        v._watchLastAdvanceAt=Date.now();
+    if(stage===1){
+      try{v.pause();}catch{}
+      await kickFeedPlayback(v,slide,'読込済み・再生を再起動中…');
+      return;
+    }
+    if(stage===2){
+      const src=v.currentSrc||v.getAttribute('src')||v.dataset.expectedSrc||v.dataset.directSrc||'';
+      const route=v.dataset.currentRoute||'direct';
+      if(src){
+        setLoadStatus(slide,'読込済み・再読込して再生中…');
+        const serial=v.dataset.loadSerial;
+        loadFeedSource(v,src,route,'active');
+        v.dataset.shouldPlay='1';
+        v._watchRecoverStage=3;
+        const start=()=>{if(v.dataset.loadSerial!==String(Number(serial)+1)&&v.dataset.feedState==='active')kickFeedPlayback(v,slide,'再読込後の再生を開始中…');};
+        if(v.readyState>=2)start();else v.addEventListener('canplay',start,{once:true});
         return;
       }
+    }
+    if(stage===3){
       const proxy=v.dataset.proxySrc||'',route=v.dataset.currentRoute||'direct';
-      if(route==='direct'&&proxy&&!v._watchRouteTried&&t<1.5){
-        v._watchRouteTried=true;feedRoutePrefs.set(v.dataset.directSrc||'','proxy');
+      if(route==='direct'&&proxy&&!v._watchRouteTried){
+        v._watchRouteTried=true;
         setLoadStatus(slide,'読込済みですが再生が停止したため経路を切替中…');
         loadFeedSource(v,proxy,'proxy','active');
-        v.dataset.shouldPlay='1';resetFeedProgressWatch(v);
+        v.dataset.shouldPlay='1';
+        v._watchRecoverStage=4;
         const playWhenReady=()=>kickFeedPlayback(v,slide,'経路切替後の再生を開始中…');
         if(v.readyState>=2)playWhenReady();else v.addEventListener('canplay',playWhenReady,{once:true});
         return;
       }
-      if(stuckFor>5000){
-        stopBufferPulse(v);
-        slide.classList.remove('video-buffering');slide.classList.add('video-load-error');
-        setLoadStatus(slide,'');
-        showFeedControls(false);
-      }
+    }
+    if(stage>=4){
+      stopBufferPulse(v);setLoadStatus(slide,'');slide.classList.remove('video-buffering');slide.classList.add('video-load-error');showFeedControls(false);
     }
   },500);
 }
@@ -1147,7 +1164,8 @@ function loadFeedSource(v,src,route,stateName='active'){
   v.dataset.feedState=stateName;
   v.dataset.currentRoute=route;
   v.dataset.expectedSrc=src;
-  resetFeedProgressWatch(v);
+  if(v._watchRecoverStage==null||Number(v._watchRecoverStage)===0)resetFeedProgressWatch(v,true);
+  else resetFeedProgressWatch(v,false);
   v.preload=stateName==='active'?'auto':'metadata';
   v.muted=!feedSoundOn;
   clearTimeout(v._routeTimer);
@@ -1200,7 +1218,8 @@ function activateFeedIndex(index,force=false){
     const current=feedSlide(i)?.querySelector('video');
     if(current?.getAttribute('src')&&current.dataset.feedState==='active')return;
   }
-  feedActivationSerial++; feedCurrentIndex=i;showFeedControls(true);
+  feedActivationSerial++;const activationId=feedActivationSerial;
+  feedCurrentIndex=i;showFeedControls(true);
   feedHotOrder=[i-1,i,i+1].filter(x=>x>=0&&x<slides.length);
   const hot=new Set(feedHotOrder);
   slides.forEach((slide,j)=>{
@@ -1215,11 +1234,12 @@ function activateFeedIndex(index,force=false){
   const item=activeFeedItems[i],slide=feedSlide(i),v=prepareFeedVideo(i,true);
   if(item?.url&&!feedSeenUrls.has(feedItemKey(item,i))){feedSeenUrls.add(feedItemKey(item,i));recordHistory(item,false);}
   if(v){
-    v.dataset.shouldPlay='1';resetFeedProgressWatch(v);
+    v.dataset.shouldPlay='1';resetFeedProgressWatch(v,true);
     v.muted=!feedSoundOn;
     const start=()=>{
+      if(feedActivationSerial!==activationId||feedCurrentIndex!==i||v.dataset.feedState!=='active')return;
       try{v.currentTime=0;}catch{}
-      v.play().catch(()=>{v.muted=true;v.play().catch(()=>slide?.classList.add('video-needs-tap'));});
+      kickFeedPlayback(v,slide,'再生を開始中…');
     };
     if(v.readyState>=2)start();else v.addEventListener('canplay',start,{once:true});
   }
@@ -1275,8 +1295,8 @@ function setupVideoAutoplay(startIndex=0){
     v.addEventListener('stalled',()=>{if(v.dataset.feedState==='active'){slide.classList.add('video-buffering');showFeedControls(false);startBufferPulse(slide,v,'loading');setLoadStatus(slide,bufferStatusText(v,'通信待ち…'));}});
     v.addEventListener('seeking',()=>{if(v.dataset.feedState==='active'){slide.classList.add('video-buffering');showFeedControls(false);startBufferPulse(slide,v,'seeking');}});
     v.addEventListener('seeked',()=>{if(v.readyState>=2){stopBufferPulse(v);setLoadStatus(slide,'');slide.classList.remove('video-buffering');}});
-    v.addEventListener('playing',()=>{resetFeedProgressWatch(v);stopBufferPulse(v);setLoadStatus(slide,'');slide.classList.remove('video-buffering','video-needs-tap');slide.classList.add('is-playing');scheduleFeedControlsHide();});
-    v.addEventListener('timeupdate',tick);
+    v.addEventListener('playing',()=>{v._watchLastAdvanceAt=v._watchLastAdvanceAt||Date.now();stopBufferPulse(v);setLoadStatus(slide,'');slide.classList.remove('video-buffering','video-needs-tap');slide.classList.add('is-playing');scheduleFeedControlsHide();});
+    v.addEventListener('timeupdate',()=>{const t=Number(v.currentTime)||0;if(t>Number(v._watchLastTime||0)+.05){v._watchLastTime=t;v._watchLastAdvanceAt=Date.now();v._watchRecoverStage=0;}tick();});
     v.addEventListener('pause',()=>{slide.classList.remove('is-playing');showFeedControls(false);});
     v.addEventListener('error',()=>{
       if(v.dataset.feedState==='released')return;
@@ -1293,7 +1313,6 @@ function setupVideoAutoplay(startIndex=0){
   });
   if(feedObserver){try{feedObserver.disconnect();}catch{}feedObserver=null;}
   if(feedScrollTimer){clearTimeout(feedScrollTimer);feedScrollTimer=null;}
-  activateFeedIndex(startIndex,true);
   feed.onscroll=()=>{
     showFeedControls(false);
     if(feedScrollTimer)clearTimeout(feedScrollTimer);
