@@ -1,4 +1,4 @@
-# MyMelter PWA 1.3.4 DISCOVER
+# MyMelter PWA 1.3.5 DISCOVER
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -34,6 +34,10 @@
 - 候補を1件ずつ追加 / まとめて追加
 
 ### メディア閲覧
+- loaded-but-stalledは再play→pause/play→同一URL再読込→必要ならWorker切替の順に段階復旧する
+- 古いcanplayコールバックはactivation serialで無効化し、別動画へ移動後に旧動画が勝手に再生しない
+- 初回再生のactivateFeedIndex二重実行を廃止し、再生開始処理を1回に固定する
+- Safariのplayingイベントでは成功扱いせず、currentTimeが実際に進んだ時だけwatchdogをリセットする
 - loaded-but-stalled状態では「読込済み・再生を再開中…」を表示する
 - 再生意図をshouldPlayで保持し、ユーザーが一時停止した動画はwatchdogで勝手に再開しない
 - 自動再実行で復旧しない開始直後の動画はdirect→Workerへ自動切替する
@@ -160,4 +164,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.3.4 DISCOVER`
+`MyMelter PWA 1.3.5 DISCOVER`
