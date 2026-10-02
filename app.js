@@ -1087,12 +1087,14 @@ function prepareFeedVideo(i,active=true){
   if(v.getAttribute('src')&&v.dataset.feedState!=='released'){
     v.dataset.feedState=active?'active':'cached';
     v.preload=active?'auto':'metadata';
+    if(active&&v.readyState<2){slide.classList.add('video-buffering');showFeedControls(false);startBufferPulse(slide,v,'loading');}
     return v;
   }
   slide.classList.remove('video-load-error','video-needs-tap');
-  slide.classList.add('video-buffering');
+  if(active){slide.classList.add('video-buffering');showFeedControls(false);}
   delete v.dataset.proxyTried;
   loadFeedSource(v,chosen.src,chosen.route,active?'active':'cached');
+  if(active)startBufferPulse(slide,v,'loading');
   return v;
 }
 function currentFeedIndexFromScroll(){
