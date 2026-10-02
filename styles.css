@@ -284,3 +284,9 @@ main,.view,.channel-list{max-width:100%;min-width:0}
 .video-dialog.controls-hidden .video-play-zone{right:0!important;top:0!important;bottom:0!important}
 .video-slide.video-buffering .video-progress,
 .video-slide.video-load-error .video-progress{opacity:1!important}
+
+.video-dialog.controls-hidden .video-close,
+.video-dialog.controls-hidden .video-action,
+.video-dialog.controls-hidden .video-scrubber{
+  pointer-events:none!important;
+}
