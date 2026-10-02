@@ -49,3 +49,5 @@ dialog{border:0;padding:0;background:transparent}.sheet-dialog{width:min(720px,1
 @media(min-width:720px){.ranking-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:640px){#view-channels .toolbar-card,.saved-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))!important}#view-channels .toolbar-card>input,.saved-toolbar>input{grid-column:1/-1}}
 @media(max-width:390px){.discover-panel{padding:11px}.local-only-note{font-size:9px;padding:5px 7px}.rank-card{padding:7px}.collection-bar{align-items:flex-start}.collection-bar>.mini-primary{padding-left:9px;padding-right:9px}}
+
+#workerTestBtn{min-height:48px;touch-action:manipulation;pointer-events:auto;-webkit-user-select:none;user-select:none}#workerTestBtn:active{transform:scale(.985)}#workerTestBtn.is-testing,#workerTestBtn:disabled{opacity:.72;cursor:wait}#workerTestStatus{font-weight:700}
