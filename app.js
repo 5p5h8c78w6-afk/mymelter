@@ -682,7 +682,7 @@ function renderReader(){
   const root=$('#readerContent'); if(!activeItems.length){root.innerHTML=`<div class="empty-card">表示できる項目がありません。</div>`;return;}
   if(activeReaderMode==='video'){
     const vids=activeItems.filter(x=>x.videoUrl);
-    root.innerHTML=vids.length?`<div class="empty-card"><strong>${vids.length}件の動画があります。</strong><br>「縦スワイプで再生」を押すと、上スワイプで次の動画へ移動できます。<br><br><button class="primary" id="launchVideoFeedBtn">縦スワイプで再生</button></div>`:`<div class="empty-card">この一覧から直接再生できる動画URLは見つかりませんでした。</div>`; return;
+    root.innerHTML=vids.length?`<div class="empty-card"><strong>${vids.length}件の動画があります。</strong><br>取り込んだ全動画を1本の縦スワイプ列として、最後まで続けて再生できます。<br><br><button class="primary" id="launchVideoFeedBtn">縦スワイプで再生</button></div>`:`<div class="empty-card">この一覧から直接再生できる動画URLは見つかりませんでした。</div>`; return;
   }
   if(activeReaderMode==='media'){
     const media=activeItems.filter(x=>x.image||x.videoUrl);
