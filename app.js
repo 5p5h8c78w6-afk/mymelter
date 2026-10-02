@@ -1,4 +1,4 @@
-const APP_VERSION = '1.3.8-DISCOVER';
+const APP_VERSION = '1.3.9-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -49,6 +49,7 @@ let feedControlsTimer = null;
 let feedPlaybackWatchdog = null;
 let feedWatchdogToken = 0;
 let pendingMediaShare = null;
+let workerCapability = {checked:false,checking:false,version:'',download:false,error:''};
 let pressCandidate = null;
 let browserImportTarget = '';
 
@@ -815,6 +816,72 @@ function toggleSavedItem(item,button=null){
   }
   return nowSaved;
 }
+function pauseFeedForExternalAction(){
+  const slide=feedSlide(feedCurrentIndex),v=slide?.querySelector('video');
+  if(v){v.dataset.shouldPlay='0';try{v.pause();}catch{};stopBufferPulse(v);}
+  showFeedControls(false);
+}
+function workerVersionAtLeast(version,min='1.3'){
+  const a=String(version||'').split('.').map(Number),b=String(min).split('.').map(Number);
+  for(let i=0;i<Math.max(a.length,b.length);i++){const x=a[i]||0,y=b[i]||0;if(x>y)return true;if(x<y)return false;}
+  return true;
+}
+async function probeWorkerDownloadCapability(force=false){
+  if(workerCapability.checking)return workerCapability;
+  if(workerCapability.checked&&!force)return workerCapability;
+  const base=(state.settings.proxyUrl||'').trim().replace(/\/+$/,'');
+  workerCapability={checked:false,checking:false,version:'',download:false,error:''};
+  if(!base){workerCapability={checked:true,checking:false,version:'',download:false,error:'Worker URL未設定'};return workerCapability;}
+  workerCapability.checking=true;
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6000);
+  try{
+    const u=new URL(base);u.searchParams.set('url','https://example.com/');
+    if(state.settings.proxyKey)u.searchParams.set('key',state.settings.proxyKey);
+    const r=await fetch(u.href,{credentials:'omit',signal:controller.signal,cache:'no-store'});
+    const version=r.headers.get('X-MyMelter-Worker-Version')||'';
+    workerCapability={checked:true,checking:false,version,download:workerVersionAtLeast(version,'1.3'),error:''};
+  }catch(e){
+    workerCapability={checked:true,checking:false,version:'',download:false,error:e?.name==='AbortError'?'Worker応答タイムアウト':(e?.message||String(e))};
+  }finally{clearTimeout(timer);}
+  return workerCapability;
+}
+function safeSaveStatusMessage(cap){
+  if(cap?.download)return 'Worker '+cap.version+' · 端末保存対応';
+  if(cap?.version)return 'Worker '+cap.version+' · 端末保存には1.3以上が必要です';
+  return cap?.error||'Worker 1.3を確認できません';
+}
+function ensureVideoSaveGate(){
+  let d=document.getElementById('videoSaveGate');if(d)return d;
+  d=document.createElement('dialog');d.id='videoSaveGate';d.className='sheet-dialog video-save-gate';
+  d.innerHTML='<div class="sheet"><div class="sheet-handle"></div><div class="sheet-head"><div><p class="eyebrow">DEVICE SAVE</p><h2>動画を端末保存</h2></div><button type="button" class="round-btn" data-video-save-close>×</button></div><p class="sheet-lead" data-video-save-status>Workerを確認中…</p><div class="button-row"><button type="button" class="primary" data-video-save-start disabled>保存開始</button><button type="button" class="secondary" data-video-save-close>閉じる</button></div></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll('[data-video-save-close]').forEach(b=>b.onclick=()=>{if(d.open)d.close();});
+  d.querySelector('[data-video-save-start]').onclick=()=>{const item=d._item;if(item)startVerifiedVideoDownload(item);};
+  return d;
+}
+async function openVideoSaveGate(item){
+  pauseFeedForExternalAction();
+  const d=ensureVideoSaveGate(),status=d.querySelector('[data-video-save-status]'),start=d.querySelector('[data-video-save-start]');
+  d._item=item;status.textContent='Worker 1.3対応を確認中…';start.disabled=true;
+  if(!d.open)d.showModal();
+  const cap=await probeWorkerDownloadCapability(!workerCapability.checked);
+  status.textContent=safeSaveStatusMessage(cap);
+  start.disabled=!cap.download;
+}
+function startVerifiedVideoDownload(item){
+  pauseFeedForExternalAction();
+  if(!workerCapability.download){
+    const d=ensureVideoSaveGate();d.querySelector('[data-video-save-status]').textContent=safeSaveStatusMessage(workerCapability);return;
+  }
+  const target=item?.videoUrl||'';if(!target)return;
+  const filename=deviceSaveFilename(item,target),saveUrl=streamingDownloadUrl(target,filename);
+  if(!saveUrl)return;
+  const d=document.getElementById('videoSaveGate');if(d?.open)d.close();
+  const win=window.open(saveUrl,'_blank');
+  if(win){try{win.opener=null;}catch{};toast('端末保存を開始しました');return;}
+  toast('Safariが保存タブを開けませんでした。動画は再生しません。');
+}
+
 function deviceSaveFilename(item,target){
   const ext=mediaFileExtension(target,item?.type||'')||'mp4';
   const rank=item?.browserRank?('_rank'+item.browserRank):'';
@@ -823,7 +890,7 @@ function deviceSaveFilename(item,target){
 function streamingDownloadUrl(target,filename=''){
   const direct=normalizeUrl(target); if(!direct)return '';
   const base=(state.settings.proxyUrl||'').trim().replace(/\/+$/,'');
-  if(!base)return direct;
+  if(!base||!workerCapability.download)return '';
   try{
     const u=new URL(base);
     u.searchParams.set('url',direct);
@@ -832,18 +899,8 @@ function streamingDownloadUrl(target,filename=''){
     if(filename)u.searchParams.set('filename',filename);
     if(state.settings.proxyKey)u.searchParams.set('key',state.settings.proxyKey);
     return u.href;
-  }catch{return direct;}
+  }catch{return '';}
 }
-function openStreamingDeviceSave(item){
-  const target=item?.videoUrl||item?.image||item?.url; if(!target)return;
-  const filename=deviceSaveFilename(item,target);
-  const saveUrl=streamingDownloadUrl(target,filename);
-  if(!saveUrl)return;
-  const win=window.open(saveUrl,'_blank');
-  if(win){try{win.opener=null;}catch{};toast(state.settings.proxyUrl?'端末保存を開始しました':'Safariで動画を開きました。共有から保存してください');return;}
-  try{window.location.href=saveUrl;}catch{toast('保存用URLを開けませんでした');}
-}
-
 function ensureMediaSaveDialog(){
   let d=document.getElementById('mediaSaveDialog'); if(d)return d;
   d=document.createElement('dialog');d.id='mediaSaveDialog';d.className='sheet-dialog media-save-dialog';
@@ -879,7 +936,9 @@ async function prepareDeviceSave(item){
     window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(target)}`;return;
   }
   if(item?.videoUrl){
-    openStreamingDeviceSave(item);
+    pauseFeedForExternalAction();
+    if(workerCapability.checked&&workerCapability.download)startVerifiedVideoDownload(item);
+    else await openVideoSaveGate(item);
     return;
   }
   const d=ensureMediaSaveDialog(),status=d.querySelector('[data-media-save-status]'),share=d.querySelector('[data-media-share]'),preview=d.querySelector('[data-media-save-preview]');
@@ -891,8 +950,7 @@ async function prepareDeviceSave(item){
     pendingMediaShare={file,objectUrl,title:item.title||'MyMelter'};
     status.textContent='準備完了。「共有して保存」を押してください。';share.disabled=false;
   }catch(e){
-    console.warn('image save prepare failed',e);status.textContent='画像の準備に失敗しました。Safariで開きます。';share.disabled=true;
-    setTimeout(()=>openStreamingDeviceSave(item),300);
+    console.warn('image save prepare failed',e);status.textContent='画像の準備に失敗しました。再試行してください。';share.disabled=true;
   }
 }
 
@@ -1444,8 +1502,8 @@ $('#clearGlobalSearch').onclick=()=>{$('#globalSearch').value='';$('#clearGlobal
 
 // Settings
 $('#fetchMode').onchange=e=>{state.settings.fetchMode=e.target.value;saveState(false);};
-$('#proxyUrl').oninput=e=>{state.settings.proxyUrl=e.target.value.trim();saveState(false);};
-$('#proxyKey').oninput=e=>{state.settings.proxyKey=e.target.value;saveState(false);};
+$('#proxyUrl').oninput=e=>{state.settings.proxyUrl=e.target.value.trim();workerCapability={checked:false,checking:false,version:'',download:false,error:''};saveState(false);probeWorkerDownloadCapability(true);};
+$('#proxyKey').oninput=e=>{state.settings.proxyKey=e.target.value;workerCapability={checked:false,checking:false,version:'',download:false,error:''};saveState(false);probeWorkerDownloadCapability(true);};
 const workerTestButton=$('#workerTestBtn');
 // Worker接続テストは index.html 内の自己完結スクリプトで実行。
 // app.js初期化に問題があっても診断できるよう、ここでは追加イベントを重ねない。
@@ -1651,4 +1709,5 @@ document.addEventListener('pointercancel',()=>{
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('SW',e));}
 const importedBrowserChannel=consumeBrowserImportHash();
 renderAll();
+probeWorkerDownloadCapability(true);
 if(importedBrowserChannel){setTimeout(()=>openChannel(importedBrowserChannel),0);}
