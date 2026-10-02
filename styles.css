@@ -349,3 +349,9 @@ main,.view,.channel-list{max-width:100%;min-width:0}
 .video-slide.system-long-video .video-overlay{display:none!important}
 .video-slide.system-long-video .video-actions{z-index:32!important}
 .video-slide.system-long-video.video-buffering::before{display:none!important}
+
+
+/* MyMelter 1.3.9 — safe video save gate */
+.video-save-gate::backdrop{background:rgba(7,18,34,.42)}
+.video-save-gate [data-video-save-start]:disabled{opacity:.45;cursor:not-allowed}
+.video-save-gate .sheet-lead{min-height:44px;display:flex;align-items:center}
