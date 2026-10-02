@@ -137,6 +137,7 @@ function normalizeChannel(c){
     searchUrl:c.searchUrl||'', selectors:{item:'',title:'',image:'',link:'',video:'',...(c.selectors||{})},
     source:c.source||'', browserSourceUrl:c.browserSourceUrl||'',
     snapshotItems:Array.isArray(c.snapshotItems)?c.snapshotItems:[],
+    deepDiveItems:Array.isArray(c.deepDiveItems)?c.deepDiveItems:[],
     createdAt:c.createdAt||Date.now(), updatedAt:Date.now(), itemCount:c.itemCount||0, lastOpenedAt:c.lastOpenedAt||0
   };
 }
@@ -151,7 +152,9 @@ function navigate(name){
 }
 
 function channelPreviewItem(c){
-  const items=Array.isArray(c?.snapshotItems)?c.snapshotItems:[];
+  const primary=Array.isArray(c?.snapshotItems)?c.snapshotItems:[];
+  const deep=Array.isArray(c?.deepDiveItems)?c.deepDiveItems:[];
+  const items=[...primary,...deep];
   return items.find(x=>x?.image)||items.find(x=>x?.videoUrl)||null;
 }
 function channelIconHTML(c){
@@ -315,7 +318,7 @@ function channelFromForm(){
   return normalizeChannel({
     id:activeEditId||uid(), name:$('#channelName').value.trim()||domainOf(url)||'チャンネル', url, type:$('#channelType').value, color:$('#channelColor').value, searchUrl:$('#searchUrl').value.trim(),
     selectors:{item:$('#itemSelector').value.trim(),title:$('#titleSelector').value.trim(),image:$('#imageSelector').value.trim(),link:$('#linkSelector').value.trim(),video:$('#videoSelector').value.trim()},
-    source:existing?.source||'', browserSourceUrl:existing?.browserSourceUrl||'', snapshotItems:existing?.snapshotItems||[],
+    source:existing?.source||'', browserSourceUrl:existing?.browserSourceUrl||'', snapshotItems:existing?.snapshotItems||[], deepDiveItems:existing?.deepDiveItems||[],
     createdAt:existing?.createdAt||Date.now()
   });
 }
@@ -708,12 +711,18 @@ async function openChannel(channel,keyword=''){
     renderReader();
   }catch(e){ $('#readerStatus').textContent=`取得できませんでした：${e.message}`; $('#readerContent').innerHTML=`<div class="empty-card"><strong>取得エラー</strong><br>${esc(e.message)}<br><br><button class="primary" data-open-url="${esc(url)}">サイトを直接開く</button></div>`; }
 }
+function activeVideoItems(){
+  const primary=(activeItems||[]).filter(x=>x?.videoUrl);
+  const deep=activeChannel&&Array.isArray(activeChannel.deepDiveItems)?activeChannel.deepDiveItems.filter(x=>x?.videoUrl):[];
+  return uniqueBy([...primary,...deep],x=>x.videoUrl||x.url);
+}
 function setReaderMode(mode,render=true){ activeReaderMode=mode; $$('#readerModeTabs button').forEach(b=>b.classList.toggle('active',b.dataset.readerMode===mode)); if(render)renderReader(); }
 function renderReader(){
   const root=$('#readerContent'); if(!activeItems.length){root.innerHTML=`<div class="empty-card">表示できる項目がありません。</div>`;return;}
   if(activeReaderMode==='video'){
-    const vids=activeItems.filter(x=>x.videoUrl);
-    root.innerHTML=vids.length?`<div class="empty-card"><strong>${vids.length}件の動画があります。</strong><br>取り込んだ全動画を1本の縦スワイプ列として、最後まで続けて再生できます。<br><br><button class="primary" id="launchVideoFeedBtn">縦スワイプで再生</button></div>`:`<div class="empty-card">この一覧から直接再生できる動画URLは見つかりませんでした。</div>`; return;
+    const vids=activeVideoItems();
+    const primaryCount=activeItems.filter(x=>x?.videoUrl).length, deepCount=Math.max(0,vids.length-primaryCount);
+    root.innerHTML=vids.length?`<div class="empty-card"><strong>${vids.length}件の動画があります。</strong><br>${deepCount?`ランキング一覧 ${primaryCount}件 + 深掘り ${deepCount}件。<br>`:''}上スワイプだけで、取得済みの深掘り動画まで止まらず続けて再生できます。<br><br><button class="primary" id="launchVideoFeedBtn">深掘りスワイプ再生</button></div>`:`<div class="empty-card">この一覧から直接再生できる動画URLは見つかりませんでした。</div>`; return;
   }
   if(activeReaderMode==='media'){
     const media=activeItems.filter(x=>x.image||x.videoUrl);
@@ -743,7 +752,7 @@ function openActiveItem(index){
   const item=activeItems[Number(index)];
   if(!item)return;
   if(item.videoUrl){
-    const vids=activeItems.filter(x=>x?.videoUrl);
+    const vids=activeVideoItems();
     const start=Math.max(0,vids.findIndex(x=>x===item||x.videoUrl===item.videoUrl));
     recordHistory(item,false);
     openVideoFeedItems(vids,activeChannel?.name||item.channelName||'動画',start);
@@ -863,7 +872,7 @@ function openVideoFeedItems(items,title='動画',startIndex=0){
   setupVideoAutoplay(feedCurrentIndex);updateFeedSoundUI();
   requestAnimationFrame(()=>requestAnimationFrame(()=>snapFeedToIndex(feedCurrentIndex)));
 }
-function openVideoFeed(){openVideoFeedItems(activeItems.filter(x=>x.videoUrl),activeChannel?.name||'動画',0);}
+function openVideoFeed(){openVideoFeedItems(activeVideoItems(),activeChannel?.name||'動画',0);}
 function videoSlideHTML(x,i){
   const direct=x.videoUrl||'',proxy=mediaProxyUrl(direct),poster=x.image||'',saved=isSavedUrl(x.url);
   const proxyAttr=proxy&&proxy!==direct?' data-proxy-src="'+esc(proxy)+'"':'';
