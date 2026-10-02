@@ -77,6 +77,13 @@
 
 WorkerはGETのみで、Cookieを転送せず、ローカル/プライベート宛先を基本的に拒否します。
 
+### Worker 1.1 の403診断
+- 通常ブラウザ互換の Accept / Accept-Language / User-Agent で取得します。
+- Workerキー不一致、Worker安全ブロック、取得先サイトのHTTP 403/429をMyMelter側で区別して表示します。
+- 取得先が403を返した場合でもCAPTCHA・Cookie・認証・IP制限の回避は行いません。
+- `https://www.twidouga.net/jp/ranking` が取得先403になった場合だけ、公開されている実ページ `https://www.twidouga.net/jp/ranking_t1.php` を1回だけ自動で試します。
+- 代替URLも403なら「サイト側がWorker経由アクセスを拒否」として停止します。
+
 ## Appleショートカット保存
 
 MyMelter → 設定 →「Appleショートカットを使う」をONにすると、端末保存ボタンから `MyMelter保存` ショートカットへURLを渡せます。
