@@ -1081,10 +1081,9 @@ function openSystemLongVideo(index){
   const item=activeFeedItems[Number(index)],slide=feedSlide(Number(index)),v=slide?.querySelector('video');
   const target=normalizeUrl(v?.dataset.directSrc||item?.videoUrl||'');
   if(!target){toast('動画URLを開けません');return;}
-  const opened=window.open(target,'_blank','noopener');
-  if(!opened){
-    try{window.location.href=target;}catch{toast('Safariで動画を開けませんでした');}
-  }
+  const opened=window.open(target,'_blank');
+  if(opened){try{opened.opener=null;}catch{};return;}
+  try{window.location.href=target;}catch{toast('Safariで動画を開けませんでした');}
 }
 function startFeedPlaybackWatchdog(){
   clearFeedPlaybackWatchdog();
