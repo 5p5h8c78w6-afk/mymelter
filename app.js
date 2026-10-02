@@ -1030,7 +1030,7 @@ function setupVideoAutoplay(startIndex=0){
   slides.forEach(slide=>{
     const i=Number(slide.dataset.feedIndex),item=vids[i],v=slide.querySelector('video');if(!v||!item)return;
     const key=item.videoUrl||item.url,cur=slide.querySelector('[data-feed-current]'),dur=slide.querySelector('[data-feed-duration]'),seek=slide.querySelector('[data-feed-seek]');
-    const tick=()=>{if(cur)cur.textContent=mediaTime(v.currentTime);if(dur&&Number.isFinite(v.duration))dur.textContent=mediaTime(v.duration);if(seek&&Number.isFinite(v.duration)){seek.max=String(v.duration);if(!seek.dataset.dragging)seek.value=String(v.currentTime||0);}};
+    const tick=()=>{if(cur)cur.textContent=mediaTime(v.currentTime);if(dur&&Number.isFinite(v.duration))dur.textContent=mediaTime(v.duration);if(seek&&Number.isFinite(v.duration)){seek.max=String(v.duration);if(!seek.dataset.dragging)seek.value=String(v.currentTime||0);const pct=v.duration?Math.max(0,Math.min(100,(Number(seek.value)||0)/v.duration*100)):0;seek.style.setProperty('--seek-pct',pct+'%');}};
     v.addEventListener('loadedmetadata',()=>{
       if(v.dataset.feedState==='released')return;
       try{v.currentTime=0;}catch{}
@@ -1181,26 +1181,41 @@ document.addEventListener('error',e=>{
   img.classList.add('media-image-error');
 },true);
 
-document.addEventListener('input',e=>{
-  const seek=e.target.closest?.('[data-feed-seek]'); if(!seek)return;
+function beginFeedSeek(seek){
+  if(!seek||seek.dataset.dragging==='1')return;
+  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video');
   seek.dataset.dragging='1';
+  seek.dataset.wasPlaying=v&&!v.paused?'1':'0';
+  if(v&&!v.paused){try{v.pause();}catch{}}
+}
+function previewFeedSeek(seek){
   const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); if(!v||!Number.isFinite(v.duration))return;
   const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
   const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
-});
-document.addEventListener('change',e=>{
-  const seek=e.target.closest?.('[data-feed-seek]'); if(!seek)return;
-  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); delete seek.dataset.dragging;
+  const pct=v.duration?next/v.duration*100:0;seek.style.setProperty('--seek-pct',pct+'%');
+}
+function commitFeedSeek(seek){
+  if(!seek||seek.dataset.dragging!=='1')return;
+  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video');
+  const wasPlaying=seek.dataset.wasPlaying==='1'; delete seek.dataset.dragging; delete seek.dataset.wasPlaying;
   if(!v||!Number.isFinite(v.duration))return;
   const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
   slide?.classList.add('video-buffering');
-  try{
-    if(typeof v.fastSeek==='function')v.fastSeek(next);else v.currentTime=next;
-  }catch{try{v.currentTime=next;}catch{}}
+  const finish=()=>{
+    slide?.classList.remove('video-buffering');
+    if(wasPlaying){v.muted=!feedSoundOn;v.play().catch(()=>{});}
+  };
+  try{v.currentTime=next;}catch{finish();return;}
   const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
-  const done=()=>slide?.classList.remove('video-buffering');
-  v.addEventListener('seeked',done,{once:true});setTimeout(done,3500);
-});
+  const done=()=>{v.removeEventListener('seeked',done);finish();};
+  v.addEventListener('seeked',done,{once:true});setTimeout(done,3000);
+}
+document.addEventListener('pointerdown',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)beginFeedSeek(seek);});
+document.addEventListener('touchstart',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)beginFeedSeek(seek);},{passive:true});
+document.addEventListener('input',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(!seek)return;if(seek.dataset.dragging!=='1')beginFeedSeek(seek);previewFeedSeek(seek);});
+document.addEventListener('change',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)commitFeedSeek(seek);});
+document.addEventListener('pointerup',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)commitFeedSeek(seek);});
+document.addEventListener('touchend',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)commitFeedSeek(seek);},{passive:true});
 
 // Initial launch
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('SW',e));}
