@@ -1,4 +1,4 @@
-const APP_VERSION = '1.2.5-DISCOVER';
+const APP_VERSION = '1.2.6-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -173,7 +173,7 @@ function renderCandidates(){
     </article>`).join('')+`<article class="candidate-card"><div class="candidate-top"><span class="mini-icon">＋</span><span><strong>候補をまとめて追加</strong><small>未登録URLだけ追加します</small></span></div><div class="candidate-actions"><button class="mini-primary" data-add-all-candidates>まとめて追加</button></div></article>`;
 }
 function thumbHTML(item, cls='media-thumb'){
-  if(item.image) return `<div class="${cls}"><img src="${esc(mediaProxyUrl(item.image))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<span class=placeholder>◇</span>'"><span class="media-badge">${esc(typeLabel(mediaKind(item)))}</span></div>`;
+  if(item.image) return `<div class="${cls}"><img ${imageSourceAttrs(item.image)} alt="" loading="lazy" referrerpolicy="no-referrer"><span class="media-badge">${esc(typeLabel(mediaKind(item)))}</span></div>`;
   return `<div class="${cls}"><span class="placeholder">${esc(typeGlyph(mediaKind(item)))}</span><span class="media-badge">${esc(typeLabel(mediaKind(item)))}</span></div>`;
 }
 function renderStrip(root, items, kind){
@@ -225,7 +225,7 @@ function renderChannelManager(){
 function colorCss(color){ return ({blue:'linear-gradient(135deg,#1677ff,#57a5ff)',red:'linear-gradient(135deg,#ff525f,#ff8b91)',green:'linear-gradient(135deg,#21b77f,#63d7ae)',purple:'linear-gradient(135deg,#7456ed,#a68ffb)',gold:'linear-gradient(135deg,#eba91b,#ffd467)'})[color]||'linear-gradient(135deg,#1677ff,#57a5ff)'; }
 
 function libraryItemHTML(x,index,kind){
-  const thumb=x.image?`<img class="library-thumb" src="${esc(mediaProxyUrl(x.image))}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="library-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
+  const thumb=x.image?`<img class="library-thumb" ${imageSourceAttrs(x.image)} alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="library-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
   const pos=Number(state.positions[x.videoUrl||x.url]||0); const details=[];
   if(x.visitedAt) details.push(fmtDate(x.visitedAt)); if(Number(x.viewCount||0)>1) details.push(`${Number(x.viewCount)}回閲覧`); if(pos>1) details.push(`続き ${fmtDuration(pos)}`);
   return `<article class="library-item">${thumb}<div class="library-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(x.channelName||domainOf(x.url))}${details.length?` · ${esc(details.join(' · '))}`:''}</small></div><div class="library-actions"><button class="icon-action" data-open-library="${kind}:${index}">開く</button>${kind==='saved'?`<button class="icon-action" data-collection-item="${index}">リスト</button><button class="icon-action" data-remove-saved="${index}">削除</button>`:`<button class="icon-action" data-save-history="${index}">保存</button>`}</div></article>`;
@@ -516,7 +516,7 @@ var parseGeneric=function(doc,base){
     D(X(c).slice(0,180)||doc.title,(a&&A(a.getAttribute('href'),base))||url,g?A(g.getAttribute('src')||g.getAttribute('data-src')||g.currentSrc,base):'',url,'')
   })
 };
-var parseAll=function(doc,base){parseTw(doc,base);parseRaw(doc,base);parseGeneric(doc,base)};
+var parseAll=function(doc,base){parseTw(doc,base);parseGeneric(doc,base);parseRaw(doc,base)};
 var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},5000);fr.style.cssText='display:none!important';fr.onload=function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)};fr.src=url;document.body.appendChild(fr)})};
 parseAll(document,location.href);
 var p=location.pathname,extra='',lk=document.querySelector('a[href*="ranking_t2.php"],a[href*="ranking_t1.php"]');
@@ -530,7 +530,7 @@ if(extra&&extra!==location.href){
 }
 I=I.slice(0,50);
 if(!I.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:6,s:location.href,n:document.title,i:I};
+var P={v:7,s:location.href,n:document.title,i:I};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -542,7 +542,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='回帰修正 v6。v4の全HTMLフォールバックを復活し、v5のタイトル・サムネイル紐付けも維持しています。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='メディア安定化 v7。DOMで正しく対応付けたタイトル・サムネイルを最優先し、全HTML抽出は取りこぼし時だけ使います。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -583,7 +583,7 @@ function consumeBrowserImportHash(){
       items.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;}); channel.snapshotItems=items; state.channels.unshift(channel);
     }
     rememberItems(items); state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('Safariから'+items.length+'件取り込みました'+(Number(payload?.v||0)<4?'（取込コードv6へ更新してください）':''));
+    toast('Safariから'+items.length+'件取り込みました'+(Number(payload?.v||0)<4?'（取込コードv7へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -691,11 +691,11 @@ function renderReader(){
   root.innerHTML=`<div class="content-list">${activeItems.map((x,i)=>contentItemHTML(x,i)).join('')}</div>`;
 }
 function contentItemHTML(x,i){
-  const th=x.image?`<img class="content-thumb" src="${esc(mediaProxyUrl(x.image))}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="content-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
+  const th=x.image?`<img class="content-thumb" ${imageSourceAttrs(x.image)} alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="content-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
   return `<article class="content-card">${th}<div class="content-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(typeLabel(mediaKind(x)))} · ${esc(domainOf(x.url))}</small><div class="content-actions"><button class="open-btn" data-active-open="${i}">開く</button><button class="save-btn" data-active-save="${i}">♡ 保存済み</button>${x.videoUrl||x.image?`<button class="save-btn" data-active-quick-save="${i}">⇩ 端末保存</button>`:''}</div></div></article>`;
 }
 function gridItemHTML(x,i){
-  const media=x.image?`<img src="${esc(mediaProxyUrl(x.image))}" alt="" loading="lazy" referrerpolicy="no-referrer">`:x.videoUrl?`<video src="${esc(x.videoUrl)}" muted playsinline preload="metadata"></video>`:`<div class="content-placeholder" style="width:100%;aspect-ratio:1/1">◇</div>`;
+  const media=x.image?`<img ${imageSourceAttrs(x.image)} alt="" loading="lazy" referrerpolicy="no-referrer">`:x.videoUrl?`<video src="${esc(x.videoUrl)}" muted playsinline preload="metadata"></video>`:`<div class="content-placeholder" style="width:100%;aspect-ratio:1/1">◇</div>`;
   return `<article class="grid-card">${media}<div class="grid-copy"><strong>${esc(x.title||'無題')}</strong><div class="grid-actions"><button data-active-open="${i}">開く</button><button data-active-save="${i}">保存</button><button data-active-quick-save="${i}">端末へ</button></div></div></article>`;
 }
 function recordHistory(item,render=true){
@@ -742,6 +742,11 @@ function mediaProxyUrl(src){
     return u.href;
   }catch{return direct;}
 }
+function imageSourceAttrs(src){
+  const direct=normalizeUrl(src); if(!direct)return '';
+  const proxy=mediaProxyUrl(direct);
+  return `src="${esc(direct)}"${proxy&&proxy!==direct?` data-proxy-src="${esc(proxy)}"`:''}`;
+}
 function mediaTime(seconds){
   const n=Math.max(0,Math.floor(Number(seconds)||0));
   const h=Math.floor(n/3600),m=Math.floor((n%3600)/60),sec=String(n%60).padStart(2,'0');
@@ -755,7 +760,7 @@ function updateFeedSoundUI(){
   document.querySelectorAll('[data-feed-sound]').forEach(b=>{
     const icon=b.querySelector('.circle'); const label=b.querySelector('.video-action-label');
     if(icon)icon.textContent=feedSoundOn?'🔊':'🔇';
-    if(label)label.textContent=feedSoundOn?'音声':'ミュート';
+    if(label)label.textContent=feedSoundOn?'音声OFF':'音声ON';
   });
   document.querySelectorAll('#videoFeed video').forEach(v=>v.muted=!feedSoundOn);
 }
@@ -776,31 +781,31 @@ window.MyMelterCloseVideoFeed=closeVideoFeed;
 function openVideoFeedItems(items,title='動画'){
   const vids=(items||[]).filter(x=>x?.videoUrl);
   if(!vids.length){toast('直接再生できる動画URLがありません');return;}
-  activeFeedItems=vids; feedSeenUrls=new Set(); feedSoundOn=true; $('#videoFeedTitle').textContent=title||'動画';
+  activeFeedItems=vids; feedSeenUrls=new Set(); feedSoundOn=false; $('#videoFeedTitle').textContent=title||'動画';
   syncVideoViewport();
   if(window.visualViewport){feedViewportHandler=syncVideoViewport;window.visualViewport.addEventListener('resize',feedViewportHandler);}
   $('#videoFeed').innerHTML=vids.map((x,i)=>videoSlideHTML(x,i)).join('');
   if(!$('#videoFeedDialog').open) $('#videoFeedDialog').showModal();
   setupVideoAutoplay(); updateFeedSoundUI();
   const first=document.querySelector('#videoFeed video');
-  if(first){first.muted=false;first.play().catch(()=>{});}
+  if(first){first.muted=true;first.play().catch(()=>{});}
 }
 function openVideoFeed(){
   const vids=activeItems.filter(x=>x.videoUrl);
   openVideoFeedItems(vids,activeChannel?.name||'動画');
 }
 function videoSlideHTML(x,i){
-  const direct=x.videoUrl||''; const proxy=mediaProxyUrl(direct); const poster=x.image?mediaProxyUrl(x.image):''; const saved=isSavedUrl(x.url);
+  const direct=x.videoUrl||''; const proxy=mediaProxyUrl(direct); const poster=x.image||''; const saved=isSavedUrl(x.url);
   const proxyAttr=proxy&&proxy!==direct?` data-proxy-src="${esc(proxy)}"`:'';
   const media=direct?`<video src="${esc(direct)}"${proxyAttr} ${poster?`poster="${esc(poster)}"`:''} data-feed-video="${i}" playsinline loop preload="metadata"></video>`:`<div class="video-fallback"><div><strong>直接再生URLがありません</strong><br><br><button class="primary" data-feed-source-open="${i}">元ページを開く</button></div></div>`;
-  return `<section class="video-slide" data-feed-index="${i}">${media}<div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div><div class="video-overlay"><strong>${esc(x.title||'動画')}</strong><small>${esc(x.channelName||domainOf(x.url))}</small></div><div class="video-actions"><button class="video-action" data-feed-sound="${i}"><span class="circle">🔊</span><span class="video-action-label">音声</span></button><button class="video-action" data-feed-quick-save="${i}"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="${i}"><span class="circle">${saved?'♥':'♡'}</span><span>${saved?'保存済み':'保存'}</span></button>${x.url&&x.url!==x.videoUrl?`<button class="video-action" data-feed-source-open="${i}"><span class="circle">↗</span><span>元ページ</span></button>`:''}</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>`;
+  return `<section class="video-slide" data-feed-index="${i}">${media}<div class="video-progress"><input class="video-seek" data-feed-seek="${i}" type="range" min="0" max="0" step="0.1" value="0" aria-label="再生位置"><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>${esc(x.title||'動画')}</strong><small>${esc(x.channelName||domainOf(x.url))}</small></div><div class="video-actions"><button class="video-action" data-feed-sound="${i}"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button class="video-action" data-feed-quick-save="${i}"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="${i}"><span class="circle">${saved?'♥':'♡'}</span><span>${saved?'保存済み':'保存'}</span></button>${x.url&&x.url!==x.videoUrl?`<button class="video-action" data-feed-source-open="${i}"><span class="circle">↗</span><span>元ページ</span></button>`:''}</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>`;
 }
 function setupVideoAutoplay(){
   const feed=$('#videoFeed'); const vids=activeFeedItems; const slides=$$('.video-slide',feed);
   slides.forEach(slide=>{
     const idx=Number(slide.dataset.feedIndex); const item=vids[idx]; const v=slide.querySelector('video'); if(!v||!item)return; const key=item.videoUrl||item.url;
-    const current=slide.querySelector('[data-feed-current]'),duration=slide.querySelector('[data-feed-duration]');
-    const updateTime=()=>{if(current)current.textContent=mediaTime(v.currentTime);if(duration&&Number.isFinite(v.duration))duration.textContent=mediaTime(v.duration);};
+    const current=slide.querySelector('[data-feed-current]'),duration=slide.querySelector('[data-feed-duration]'),seek=slide.querySelector('[data-feed-seek]');
+    const updateTime=()=>{if(current)current.textContent=mediaTime(v.currentTime);if(duration&&Number.isFinite(v.duration))duration.textContent=mediaTime(v.duration);if(seek&&Number.isFinite(v.duration)){seek.max=String(v.duration);if(!seek.matches(':active'))seek.value=String(v.currentTime||0);}};
     v.addEventListener('loadedmetadata',()=>{const pos=Number(state.positions[key]||0);if(pos>1&&Number.isFinite(v.duration)&&pos<v.duration-2){try{v.currentTime=pos;}catch{}}updateTime();},{once:true});
     v.addEventListener('timeupdate',updateTime);
     v.addEventListener('play',()=>slide.classList.add('is-playing'));
@@ -808,7 +813,7 @@ function setupVideoAutoplay(){
     v.addEventListener('error',()=>{
       const proxy=v.dataset.proxySrc||'';
       if(proxy&&!v.dataset.proxyTried){v.dataset.proxyTried='1';v.src=proxy;v.load();v.muted=!feedSoundOn;v.play().catch(()=>{});return;}
-      slide.classList.add('video-load-error');toast('動画を再生できません。取込コードv5で再取り込みし、必要ならWorker 1.2へ更新してください');
+      slide.classList.add('video-load-error');toast('この動画は直再生とWorker再生の両方に失敗しました。Worker 1.2の配備状態も確認してください');
     });
     const keep=()=>{if(!Number.isFinite(v.duration))return;if(v.currentTime>1&&v.currentTime<v.duration-2)state.positions[key]=Math.floor(v.currentTime);else delete state.positions[key];saveState(false);};
     v.addEventListener('pause',keep);v.addEventListener('ended',()=>{delete state.positions[key];saveState(false);});
@@ -818,7 +823,7 @@ function setupVideoAutoplay(){
     if(e.isIntersecting&&e.intersectionRatio>.68){
       slides.forEach(s=>s.classList.toggle('is-current',s===slide));
       if(item?.url&&!feedSeenUrls.has(item.url)){feedSeenUrls.add(item.url);recordHistory(item,false);}
-      if(v){v.muted=!feedSoundOn;v.play().catch(()=>slide.classList.add('video-needs-tap'));}
+      if(v){v.muted=!feedSoundOn;v.play().catch(()=>{v.muted=true;v.play().catch(()=>slide.classList.add('video-needs-tap'));});}
     }else{v?.pause();slide.classList.remove('is-current');}
   }),{root:feed,threshold:[.2,.68,.9]}); slides.forEach(slide=>obs.observe(slide));
 }
@@ -922,6 +927,22 @@ document.addEventListener('click',async e=>{
   const recent=e.target.closest('[data-recent-index]'); if(recent){openItem(state.history[Number(recent.dataset.recentIndex)]);return;}
   const saved=e.target.closest('[data-saved-index]'); if(saved){openItem(state.saved[Number(saved.dataset.savedIndex)]);return;}
   const url=e.target.closest('[data-open-url]'); if(url){const target=url.dataset.openUrl;if(target){recordHistory({title:target,url:target,type:'article'});window.open(target,'_blank','noopener');}return;}
+});
+
+document.addEventListener('error',e=>{
+  const img=e.target;
+  if(!(img instanceof HTMLImageElement))return;
+  const proxy=img.dataset.proxySrc||'';
+  if(proxy&&!img.dataset.proxyTried){img.dataset.proxyTried='1';img.src=proxy;return;}
+  img.classList.add('media-image-error');
+},true);
+
+document.addEventListener('input',e=>{
+  const seek=e.target.closest?.('[data-feed-seek]'); if(!seek)return;
+  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); if(!v||!Number.isFinite(v.duration))return;
+  const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
+  try{v.currentTime=next;}catch{}
+  const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
 });
 
 // Initial launch
