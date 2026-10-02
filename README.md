@@ -1,4 +1,4 @@
-# MyMelter PWA 1.3.8 DISCOVER
+# MyMelter PWA 1.3.9 DISCOVER
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -34,6 +34,10 @@
 - 候補を1件ずつ追加 / まとめて追加
 
 ### メディア閲覧
+- 動画保存の失敗経路からwindow.locationや直接動画再生への遷移を削除する
+- Worker 1.3確認済みなら保存ボタン1タップでdownload=1へ進み、未確認/旧版なら保存確認シートで停止する
+- 端末保存を押した瞬間に現在動画をpauseしshouldPlay=0へ変更し、watchdogの自動再生復帰を止める
+- 動画の端末保存ではWorker 1.3未確認時に動画URLへフォールバックせず、その場で停止して理由を表示する
 - 動画再生画面の保存ラベルは「端末保存」に統一する
 - 画像保存だけはFile共有を使い、15秒で準備できなければSafari表示へフォールバックする
 - Workerが旧版または未設定でも動画URLを即Safariで開き、「準備中」のまま待ち続けない
@@ -177,4 +181,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.3.8 DISCOVER`
+`MyMelter PWA 1.3.9 DISCOVER`
