@@ -7,8 +7,8 @@
 const CORS_HEADERS={
   'Access-Control-Allow-Origin':'*',
   'Access-Control-Allow-Methods':'GET,OPTIONS',
-  'Access-Control-Allow-Headers':'Content-Type',
-  'Access-Control-Expose-Headers':'X-MyMelter-Error,X-MyMelter-Upstream-Status,X-MyMelter-Final-URL,X-MyMelter-Worker-Version'
+  'Access-Control-Allow-Headers':'Content-Type,Range',
+  'Access-Control-Expose-Headers':'X-MyMelter-Error,X-MyMelter-Upstream-Status,X-MyMelter-Final-URL,X-MyMelter-Worker-Version,Content-Type,Content-Length,Content-Range,Accept-Ranges'
 };
 
 function blockedHost(host){
@@ -25,7 +25,7 @@ function plain(message,status,errorCode,extra={}){
       ...CORS_HEADERS,
       'Content-Type':'text/plain; charset=utf-8',
       'X-MyMelter-Error':errorCode,
-      'X-MyMelter-Worker-Version':'1.1'
+      'X-MyMelter-Worker-Version':'1.2'
       ,...extra
     }
   });
@@ -36,7 +36,7 @@ export default {
     const req=new URL(request.url);
 
     if(request.method==='OPTIONS'){
-      return new Response(null,{status:204,headers:{...CORS_HEADERS,'X-MyMelter-Worker-Version':'1.1'}});
+      return new Response(null,{status:204,headers:{...CORS_HEADERS,'X-MyMelter-Worker-Version':'1.2'}});
     }
     if(request.method!=='GET') return plain('GET only',405,'method-not-allowed');
 
@@ -55,12 +55,13 @@ export default {
 
     // 通常ブラウザに近いAccept/言語/UAにして、単純な互換性問題を減らす。
     // MyMelterトークンも残し、CAPTCHA・Cookie・認証・IP制限は回避しない。
+    const isMedia=req.searchParams.get('media')==='1'||/(^|\.)video\.twimg\.com$/i.test(target.hostname);
     const upstreamHeaders=new Headers({
-      'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept':isMedia?'video/*,*/*;q=0.8':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
       'Accept-Language':'ja-JP,ja;q=0.9,en-US;q=0.6,en;q=0.5',
-      'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 MyMelter/1.1',
-      'Upgrade-Insecure-Requests':'1'
+      'User-Agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1 MyMelter/1.2'
     });
+    const range=request.headers.get('Range'); if(range) upstreamHeaders.set('Range',range);
 
     let upstream;
     try{
@@ -74,7 +75,7 @@ export default {
     const headers=new Headers(upstream.headers);
     for(const [k,v] of Object.entries(CORS_HEADERS)) headers.set(k,v);
     headers.set('Cache-Control','private, max-age=90');
-    headers.set('X-MyMelter-Worker-Version','1.1');
+    headers.set('X-MyMelter-Worker-Version','1.2');
     headers.set('X-MyMelter-Upstream-Status',String(upstream.status));
     headers.set('X-MyMelter-Final-URL',upstream.url||target.href);
     headers.set('X-MyMelter-Error',upstream.ok?'none':'upstream-http');
