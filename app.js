@@ -1,4 +1,4 @@
-const APP_VERSION = '1.2.7-DISCOVER';
+const APP_VERSION = '1.2.8-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -911,7 +911,8 @@ function videoSlideHTML(x,i){
   const direct=x.videoUrl||'',proxy=mediaProxyUrl(direct),poster=x.image||'',saved=isSavedUrl(x.url);
   const proxyAttr=proxy&&proxy!==direct?' data-proxy-src="'+esc(proxy)+'"':'';
   const media=direct?'<video data-direct-src="'+esc(direct)+'"'+proxyAttr+(poster?' poster="'+esc(poster)+'"':'')+' data-feed-video="'+i+'" playsinline loop preload="none"></video>':'<div class="video-fallback"><div><strong>直接再生URLがありません</strong></div></div>';
-  return '<section class="video-slide" data-feed-index="'+i+'">'+media+'<div class="video-progress"><input class="video-seek" data-feed-seek="'+i+'" type="range" min="0" max="0" step="0.1" value="0"><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(x.channelName||domainOf(x.url))+'</small></div><div class="video-actions"><button class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
+  const source=x.deepDive?('深掘り · '+(x.deepSource||'関連')):(x.channelName||domainOf(x.url));
+  return '<section class="video-slide" data-feed-index="'+i+'">'+media+'<div class="video-progress"><input class="video-seek" data-feed-seek="'+i+'" type="range" min="0" max="0" step="0.1" value="0"><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
 }
 function setupVideoAutoplay(startIndex=0){
   const feed=$('#videoFeed'),vids=activeFeedItems,slides=$$('.video-slide',feed);
