@@ -1,4 +1,4 @@
-# MyMelter PWA 1.3.5 DISCOVER
+# MyMelter PWA 1.3.6 DISCOVER
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -34,6 +34,10 @@
 - 候補を1件ずつ追加 / まとめて追加
 
 ### メディア閲覧
+- 短尺動画は従来のMyMelterカスタム再生UIを維持する
+- 長尺動画の縦スワイプ列・保存ボタン・元ページは維持する
+- 長尺動画では動画本体へのタッチをSafariへ戻し、標準の再生/一時停止/シークを使用する
+- 45秒超の長尺動画はSafariネイティブcontrolsへ自動切替し、自作watchdog/スクラバーを停止する
 - loaded-but-stalledは再play→pause/play→同一URL再読込→必要ならWorker切替の順に段階復旧する
 - 古いcanplayコールバックはactivation serialで無効化し、別動画へ移動後に旧動画が勝手に再生しない
 - 初回再生のactivateFeedIndex二重実行を廃止し、再生開始処理を1回に固定する
@@ -164,4 +168,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.3.5 DISCOVER`
+`MyMelter PWA 1.3.6 DISCOVER`

@@ -290,3 +290,28 @@ main,.view,.channel-list{max-width:100%;min-width:0}
 .video-dialog.controls-hidden .video-scrubber{
   pointer-events:none!important;
 }
+
+
+/* MyMelter 1.3.6 — Safari native long-video mode */
+.video-slide.native-long-video video{
+  pointer-events:auto!important;
+  touch-action:auto!important;
+  user-select:auto!important;
+  -webkit-user-select:auto!important;
+}
+.video-slide.native-long-video .video-play-zone,
+.video-slide.native-long-video .video-progress,
+.video-slide.native-long-video .video-load-status,
+.video-slide.native-long-video .swipe-hint{
+  display:none!important;
+}
+.video-slide.native-long-video .video-overlay{
+  opacity:0!important;
+  pointer-events:none!important;
+}
+.video-slide.native-long-video .video-actions{
+  z-index:40!important;
+}
+.video-slide.native-long-video.video-buffering::before{
+  display:none!important;
+}
