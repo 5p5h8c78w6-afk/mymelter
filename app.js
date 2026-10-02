@@ -188,7 +188,7 @@ function getRankingItems(mode=state.ui.rankingMode){
 }
 function renderRanking(){
   const mode=state.ui.rankingMode||'new';
-  $('#rankingTabs [data-ranking-mode]').forEach(b=>b.classList.toggle('active',b.dataset.rankingMode===mode));
+  document.querySelectorAll('#rankingTabs [data-ranking-mode]').forEach(b=>b.classList.toggle('active',b.dataset.rankingMode===mode));
   currentRankingItems=getRankingItems(mode);
   const root=$('#rankingGrid');
   if(!currentRankingItems.length){
