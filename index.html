@@ -10,7 +10,49 @@
   <meta name="format-detection" content="telephone=no" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icons/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=1.1.4" />
+  <link rel="stylesheet" href="./styles.css?v=1.1.5" />
+  <script>
+    window.MyMelterInlineWorkerTest = async function(ev){
+      try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){}
+      var status=document.getElementById('workerTestStatus');
+      var btn=document.getElementById('workerTestBtn');
+      var urlInput=document.getElementById('proxyUrl');
+      var keyInput=document.getElementById('proxyKey');
+      if(status) status.textContent='タップ検出PASS → Workerへ接続中…';
+      if(btn) btn.disabled=true;
+      var controller=new AbortController();
+      var timer=setTimeout(function(){ controller.abort(); },8000);
+      try{
+        var base=(urlInput && urlInput.value ? urlInput.value : '').trim().replace(/\/+$/,'');
+        if(!base){
+          if(status) status.textContent='タップ検出PASS · Worker URLが未設定です。';
+          return false;
+        }
+        var u=new URL(base);
+        u.searchParams.set('url','https://example.com/');
+        var key=(keyInput && keyInput.value ? keyInput.value : '').trim();
+        if(key) u.searchParams.set('key',key);
+        var r=await fetch(u.href,{credentials:'omit',signal:controller.signal});
+        var ver=r.headers.get('X-MyMelter-Worker-Version')||'旧版/不明';
+        var err=r.headers.get('X-MyMelter-Error')||'';
+        if(r.ok){
+          if(status) status.textContent='接続PASS · Worker '+ver+(ver==='1.1'?' · 403診断対応':'');
+        }else{
+          if(status) status.textContent='接続応答あり · HTTP '+r.status+' · Worker '+ver+(err?' · '+err:'');
+        }
+      }catch(e){
+        if(status) status.textContent=(e && e.name==='AbortError')?'接続FAIL：8秒以内に応答がありません。':'接続FAIL：'+(e && e.message ? e.message : String(e));
+      }finally{
+        clearTimeout(timer);
+        if(btn) btn.disabled=false;
+      }
+      return false;
+    };
+    window.addEventListener('DOMContentLoaded',function(){
+      var s=document.getElementById('workerTestStatus');
+      if(s) s.textContent='HTML診断JS起動済み · タップしてWorkerを確認';
+    });
+  </script>
   <title>MyMelter</title>
 </head>
 <body>
@@ -155,8 +197,11 @@
         </label>
         <label class="field"><span>Cloudflare Worker URL</span><input id="proxyUrl" type="url" placeholder="https://xxxx.workers.dev" /></label>
         <label class="field"><span>Workerキー（任意）</span><input id="proxyKey" type="password" placeholder="MYMELTER_KEY" autocomplete="off" /></label>
-        <div class="button-row worker-test-row"><button id="workerTestBtn" class="secondary" type="button" onclick="return window.MyMelterWorkerTest ? window.MyMelterWorkerTest(event) : false;" onpointerup="return window.MyMelterWorkerTest ? window.MyMelterWorkerTest(event) : false;" ontouchend="return window.MyMelterWorkerTest ? window.MyMelterWorkerTest(event) : false;">Worker接続テスト</button></div>
-        <div id="workerTestStatus" class="status-line" role="status" aria-live="polite">待機中 · タップしてWorkerを確認</div>
+        <div class="button-row worker-test-row">
+          <button id="workerTestBtn" class="secondary" type="button" onclick="return window.MyMelterInlineWorkerTest(event);">Worker接続テスト</button>
+          <a id="workerDirectTestLink" class="secondary worker-direct-link" href="https://mymelter-proxy.5p5h8c78w6.workers.dev/?url=https%3A%2F%2Fexample.com%2F" target="_blank" rel="noopener">直通テスト</a>
+        </div>
+        <div id="workerTestStatus" class="status-line" role="status" aria-live="polite">HTML診断待機中…</div>
         <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。Worker 1.1では403の原因も区別表示します。</p>
       </div>
 
@@ -177,7 +222,7 @@
 
       <div class="settings-group">
         <h3>このアプリ</h3>
-        <p class="help">MyMelter PWA 1.1.4 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
+        <p class="help">MyMelter PWA 1.1.5 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
       </div>
     </section>
   </main>
@@ -300,6 +345,6 @@
     </div>
   </dialog>
 
-  <script src="./app.js?v=1.1.4"></script>
+  <script src="./app.js?v=1.1.5"></script>
 </body>
 </html>
