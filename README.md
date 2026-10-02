@@ -1,4 +1,4 @@
-# MyMelter PWA 1.2.0 DISCOVER
+# MyMelter PWA 1.2.1 DISCOVER
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -95,7 +95,7 @@ Worker接続自体が正常でも取得先サイトがHTTP 403を返す場合は
 5. ブックマーク「MyMelter取込」を実行
 6. MyMelterへ戻り、取得した項目をローカルのスナップショットチャンネルとして保存
 
-この方式はWorker/IP経由の取得ではなく、Safari上でユーザーが表示できたDOMから公開リンク・画像・動画候補を抽出します。ログイン回避、CAPTCHA回避、DRM回避は行いません。
+この方式はWorker/IP経由の取得ではなく、Safari上でユーザーが表示できたDOMから公開リンク・画像・動画候補を抽出します。twidougaでは公開DOM内の `video.twimg.com` 直リンクを優先して取り込み、MyMelter内の縦スワイププレイヤーで再生します。既存の「MyMelter取込」ブックマークはv2コードへ1回更新してください。ログイン回避、CAPTCHA回避、DRM回避は行いません。
 
 ## Appleショートカット保存
 
@@ -121,4 +121,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.2.0 DISCOVER`
+`MyMelter PWA 1.2.1 DISCOVER`
