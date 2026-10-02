@@ -1,4 +1,4 @@
-const APP_VERSION = '1.2.8-DISCOVER';
+const APP_VERSION = '1.2.9-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -42,6 +42,8 @@ let feedViewportHandler = null;
 let feedObserver = null;
 let feedScrollTimer = null;
 let feedCurrentIndex = 0;
+let feedRoutePrefs = new Map();
+let feedActivationSerial = 0;
 let browserImportTarget = '';
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -490,7 +492,7 @@ var R=${returnUrl};
 var A=function(u,b){try{return new URL(u,b||location.href).href}catch(e){return''}};
 var X=function(e){return((e&&(e.innerText||e.textContent))||'').replace(new RegExp('\\\\s+','g'),' ').trim()};
 var S={},I=[];
-var D=function(t,u,p,m,r){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var k=m||u;if(!u||u.indexOf('http')!==0||!k||S[k])return;S[k]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
+var D=function(t,u,p,m,r,k){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var key=k||m||u;if(!u||u.indexOf('http')!==0||!key||S[key])return;S[key]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
 var collect=function(txt,pat){var out=[],re=new RegExp(pat,'g'),m;while((m=re.exec(String(txt||'')))!==null){out.push(m[0]);if(!m[0])re.lastIndex++}return out};
 var texts=function(doc){var body=X(doc.body),r=[],sv=[],m,re1=new RegExp('第\\\\s*(\\\\d+)\\\\s*位','g'),re2=new RegExp('(\\\\d+)\\\\s*回保存','g');while((m=re1.exec(body))!==null)r.push(m[1]);while((m=re2.exec(body))!==null)sv.push(m[1]);return{r:r,s:sv}};
 var postList=function(doc,base){return [].slice.call(doc.querySelectorAll('a[href*="x.com/"][href*="/status/"],a[href*="twitter.com/"][href*="/status/"],a[href*="twitter.com/i/status/"]')).map(function(a){return{u:A(a.getAttribute('href'),base),t:X(a)}})};
@@ -511,7 +513,7 @@ var parseTw=function(doc,base){
       n=n.previousSibling;h++
     }
     var qm=txt.match(new RegExp('(?:第\\\\s*)?(\\\\d+)\\\\s*位')),sm=txt.match(new RegExp('(\\\\d+)\\\\s*回保存')),rn=qm?qm[1]:String(j+1),sv=sm?sm[1]:'',lab='第'+rn+'位'+(sv?' · '+sv+'回保存':'');
-    D(pt?lab+'｜'+pt:lab,post||v,im,v,rn)
+    D(pt?lab+'｜'+pt:lab,post||v,im,v,rn,base+'#rank='+rn)
   })
 };
 var parseRaw=function(doc,base){
@@ -525,8 +527,8 @@ var parseRaw=function(doc,base){
   ims.forEach(function(v){v=A(v,base);if(v&&!seenI[v]){seenI[v]=1;images.push(v)}});
   videos.forEach(function(v,j){
     var rn=ts.r[j]||String(j+1),sv=ts.s[j]||'',lab='第'+rn+'位'+(sv?' · '+sv+'回保存':'');
-    var pt=ps[j]&&ps[j].t?ps[j].t:'',src=ps[j]&&ps[j].u?ps[j].u:v,im=images[j]||'';
-    D(pt?lab+'｜'+pt:lab,src,im,v,rn)
+    var pt=ps[j]&&ps[j].t?ps[j].t:'',src=ps[j]&&ps[j].u?ps[j].u:v;
+    D(pt?lab+'｜'+pt:lab,src,'',v,rn)
   })
 };
 var parseGeneric=function(doc,base){
@@ -535,7 +537,7 @@ var parseGeneric=function(doc,base){
     D(X(c).slice(0,180)||doc.title,(a&&A(a.getAttribute('href'),base))||url,g?A(g.getAttribute('src')||g.getAttribute('data-src')||g.currentSrc,base):'',url,'')
   })
 };
-var parseAll=function(doc,base){parseTw(doc,base);parseGeneric(doc,base);parseRaw(doc,base)};
+var parseAll=function(doc,base){var before=I.length;parseTw(doc,base);if(I.length===before)parseGeneric(doc,base);if(I.length===before)parseRaw(doc,base)};
 var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},8000);fr.style.cssText='position:fixed!important;left:-10000px!important;top:0!important;width:2px!important;height:2px!important;opacity:.01!important;pointer-events:none!important;border:0!important';fr.onload=function(){if(done)return;setTimeout(function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)},250)};fr.src=url;document.body.appendChild(fr)})};
 var pageSeen={},rankQueue=[],creatorQueue=[];
 var enqueuePage=function(arr,u){if(!u||pageSeen[u])return;pageSeen[u]=1;arr.push(u)};
@@ -580,7 +582,7 @@ while(creatorQueue.length&&creators<3&&I.length<80){
 var primary=I.slice(0,primaryEnd),deep=I.slice(primaryEnd);
 I=I.slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
 if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:9,s:location.href,n:document.title,i:primary,d:deep};
+var P={v:10,s:location.href,n:document.title,i:primary,d:deep};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -592,7 +594,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='深掘り取込 v9。現在のランキング一覧はそのまま保存し、11〜20位・週間・月間・関連ランキング・取得可能な投稿者別ページを動画タブ専用の深掘りフィードへ追加します。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='安定再生・順位固定 v10。同一動画が複数順位にある場合も順位IDを分離し、正しく対応したサムネイルだけを採用します。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -634,8 +636,9 @@ function consumeBrowserImportHash(){
       if(!url&&!videoUrl)return null;
       return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type:videoUrl?'video':image?'image':'article',browserRank:String(x?.r||''),deepSource:String(x?.z||''),deepDive:!!deep};
     }).filter(Boolean);
-    const items=uniqueBy(mapImported(payload?.i,false),x=>x.videoUrl||x.url).slice(0,30);
-    const primaryKeys=new Set(items.map(x=>x.videoUrl||x.url));
+    const primaryRaw=mapImported(payload?.i,false);
+    const items=uniqueBy(primaryRaw,x=>x.browserRank?('rank:'+x.browserRank):(x.id||x.videoUrl||x.url)).slice(0,30);
+    const primaryKeys=new Set(items.map(x=>x.videoUrl||x.url).filter(Boolean));
     const deepItems=uniqueBy(mapImported(payload?.d,true),x=>x.videoUrl||x.url).filter(x=>!primaryKeys.has(x.videoUrl||x.url)).slice(0,60);
     if(!items.length&&!deepItems.length) throw new Error('取り込める項目がありません');
     let channel=state.channels.find(c=>c.source==='browser'&&canonicalBrowserSourceUrl(c.browserSourceUrl||c.url)===source);
@@ -651,7 +654,7 @@ function consumeBrowserImportHash(){
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件'+(Number(payload?.v||0)<9?'（取込コードv9へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件'+(Number(payload?.v||0)<10?'（取込コードv10へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -747,8 +750,12 @@ async function openChannel(channel,keyword=''){
 }
 function activeVideoItems(){
   const primary=(activeItems||[]).filter(x=>x?.videoUrl);
-  const deep=activeChannel&&Array.isArray(activeChannel.deepDiveItems)?activeChannel.deepDiveItems.filter(x=>x?.videoUrl):[];
-  return uniqueBy([...primary,...deep],x=>x.videoUrl||x.url);
+  const seen=new Set(primary.map(x=>x.videoUrl||x.url).filter(Boolean));
+  const deep=activeChannel&&Array.isArray(activeChannel.deepDiveItems)?activeChannel.deepDiveItems.filter(x=>{
+    if(!x?.videoUrl)return false;
+    const key=x.videoUrl||x.url;if(!key||seen.has(key))return false;seen.add(key);return true;
+  }):[];
+  return [...primary,...deep];
 }
 function setReaderMode(mode,render=true){ activeReaderMode=mode; $$('#readerModeTabs button').forEach(b=>b.classList.toggle('active',b.dataset.readerMode===mode)); if(render)renderReader(); }
 function renderReader(){
@@ -787,7 +794,10 @@ function openActiveItem(index){
   if(!item)return;
   if(item.videoUrl){
     const vids=activeVideoItems();
-    const start=Math.max(0,vids.findIndex(x=>x===item||x.videoUrl===item.videoUrl));
+    let start=vids.findIndex(x=>x.id&&item.id&&x.id===item.id);
+    if(start<0&&item.browserRank)start=vids.findIndex(x=>x.browserRank===item.browserRank&&x.videoUrl===item.videoUrl);
+    if(start<0)start=vids.findIndex(x=>x===item);
+    start=Math.max(0,start);
     recordHistory(item,false);
     openVideoFeedItems(vids,activeChannel?.name||item.channelName||'動画',start);
     return;
@@ -857,8 +867,9 @@ function setFeedSound(on){
   if(current&&!current.paused)current.play().catch(()=>{});
 }
 function closeVideoFeed(){
-  document.querySelectorAll('#videoFeed video').forEach(v=>{try{saveFeedVideoPosition(v);v.pause();v.removeAttribute('src');v.load();}catch{}});
-  activeFeedItems=[];feedCurrentIndex=0;
+  feedActivationSerial++;
+  document.querySelectorAll('#videoFeed video').forEach(v=>releaseFeedVideoElement(v,true));
+  activeFeedItems=[];feedCurrentIndex=0;feedRoutePrefs=new Map();
   if(feedObserver){try{feedObserver.disconnect();}catch{}feedObserver=null;}
   if(feedScrollTimer){clearTimeout(feedScrollTimer);feedScrollTimer=null;}
   const feed=$('#videoFeed');if(feed)feed.onscroll=null;
@@ -867,6 +878,10 @@ function closeVideoFeed(){
   const d=$('#videoFeedDialog');if(d?.open)d.close();
 }
 window.MyMelterCloseVideoFeed=closeVideoFeed;
+
+function feedItemKey(item,index=0){
+  return item?.id||((item?.browserRank?('rank:'+item.browserRank+':'):'')+(item?.videoUrl||item?.url||index));
+}
 function saveFeedVideoPosition(v){
   const item=activeFeedItems[Number(v?.dataset.feedVideo)];
   if(!item||!Number.isFinite(v.duration))return;
@@ -874,37 +889,100 @@ function saveFeedVideoPosition(v){
   if(v.currentTime>1&&v.currentTime<v.duration-2)state.positions[key]=Math.floor(v.currentTime);else delete state.positions[key];
 }
 function feedSlide(i){return document.querySelector('.video-slide[data-feed-index="'+i+'"]');}
-function prepareFeedVideo(i){
-  const slide=feedSlide(i),v=slide?.querySelector('video');if(!v||v.getAttribute('src'))return;
-  const direct=v.dataset.directSrc||'';if(!direct)return;
-  slide.classList.remove('video-load-error','video-needs-tap');delete v.dataset.proxyTried;
-  v.src=direct;v.muted=!feedSoundOn;v.preload='metadata';try{v.load();}catch{}
+function releaseFeedVideoElement(v,final=false){
+  if(!v)return;
+  try{saveFeedVideoPosition(v);v.pause();}catch{}
+  v.dataset.feedState='released';
+  v.dataset.loadSerial=String((Number(v.dataset.loadSerial)||0)+1);
+  v.removeAttribute('src');
+  v.preload='none';
+  try{v.load();}catch{}
+  if(final){delete v.dataset.proxyTried;delete v.dataset.expectedSrc;delete v.dataset.currentRoute;}
 }
 function releaseFeedVideo(i){
-  const slide=feedSlide(i),v=slide?.querySelector('video');if(!v||!v.getAttribute('src'))return;
-  try{saveFeedVideoPosition(v);v.pause();}catch{}
-  v.dataset.releasing='1';v.removeAttribute('src');try{v.load();}catch{}
-  setTimeout(()=>{delete v.dataset.releasing;},0);delete v.dataset.proxyTried;
-  slide.classList.remove('is-playing','video-needs-tap','video-load-error');
+  const slide=feedSlide(i),v=slide?.querySelector('video');
+  if(v)releaseFeedVideoElement(v);
+  slide?.classList.remove('is-playing','video-needs-tap','video-load-error','video-buffering');
 }
-function setFeedWindow(center){
-  feedCurrentIndex=Math.max(0,Math.min(activeFeedItems.length-1,Number(center)||0));
-  document.querySelectorAll('.video-slide').forEach(slide=>{
-    const i=Number(slide.dataset.feedIndex);if(Math.abs(i-feedCurrentIndex)<=1)prepareFeedVideo(i);else releaseFeedVideo(i);
+function loadFeedSource(v,src,route,stateName='active'){
+  if(!v||!src)return;
+  const serial=(Number(v.dataset.loadSerial)||0)+1;
+  v.dataset.loadSerial=String(serial);
+  v.dataset.feedState=stateName;
+  v.dataset.currentRoute=route;
+  v.dataset.expectedSrc=src;
+  v.preload=stateName==='active'?'auto':'metadata';
+  v.muted=!feedSoundOn;
+  v.src=src;
+  try{v.load();}catch{}
+}
+function preferredFeedSource(v){
+  const direct=v?.dataset.directSrc||'',proxy=v?.dataset.proxySrc||'';
+  const pref=feedRoutePrefs.get(direct);
+  if(pref==='proxy'&&proxy)return {src:proxy,route:'proxy'};
+  return {src:direct,route:'direct'};
+}
+function prepareFeedVideo(i,active=true){
+  const slide=feedSlide(i),v=slide?.querySelector('video');if(!v)return null;
+  const chosen=preferredFeedSource(v);if(!chosen.src)return null;
+  if(v.getAttribute('src')&&v.dataset.feedState!=='released'){
+    v.dataset.feedState=active?'active':'preload';
+    v.preload=active?'auto':'metadata';
+    return v;
+  }
+  slide.classList.remove('video-load-error','video-needs-tap');
+  slide.classList.add('video-buffering');
+  delete v.dataset.proxyTried;
+  loadFeedSource(v,chosen.src,chosen.route,active?'active':'preload');
+  return v;
+}
+function currentFeedIndexFromScroll(){
+  const feed=$('#videoFeed'),slides=$$('.video-slide',feed);
+  if(!feed||!slides.length)return 0;
+  let best=0,bestDist=Infinity;
+  const top=feed.scrollTop;
+  slides.forEach((slide,i)=>{const d=Math.abs(slide.offsetTop-top);if(d<bestDist){bestDist=d;best=i;}});
+  return best;
+}
+function activateFeedIndex(index,force=false){
+  const slides=$$('.video-slide',$('#videoFeed'));
+  if(!slides.length)return;
+  const i=Math.max(0,Math.min(slides.length-1,Number(index)||0));
+  if(!force&&i===feedCurrentIndex){
+    const current=feedSlide(i)?.querySelector('video');
+    if(current?.getAttribute('src')&&current.dataset.feedState==='active')return;
+  }
+  feedActivationSerial++;
+  feedCurrentIndex=i;
+  slides.forEach((slide,j)=>{
+    slide.classList.toggle('is-current',j===i);
+    const v=slide.querySelector('video');
+    if(!v)return;
+    if(j===i)return;
+    releaseFeedVideoElement(v);
+    slide.classList.remove('is-playing','video-needs-tap','video-load-error','video-buffering');
   });
+  const item=activeFeedItems[i],slide=feedSlide(i),v=prepareFeedVideo(i,true);
+  if(item?.url&&!feedSeenUrls.has(feedItemKey(item,i))){feedSeenUrls.add(feedItemKey(item,i));recordHistory(item,false);}
+  if(v){
+    v.muted=!feedSoundOn;
+    const play=()=>v.play().catch(()=>{v.muted=true;v.play().catch(()=>slide?.classList.add('video-needs-tap'));});
+    if(v.readyState>=2)play();else v.addEventListener('canplay',play,{once:true});
+  }
 }
 function snapFeedToIndex(i){
   const feed=$('#videoFeed'),slide=feedSlide(i);if(feed&&slide)feed.scrollTo({top:slide.offsetTop,behavior:'auto'});
 }
 function openVideoFeedItems(items,title='動画',startIndex=0){
   const vids=(items||[]).filter(x=>x?.videoUrl);if(!vids.length){toast('直接再生できる動画URLがありません');return;}
-  activeFeedItems=vids;feedSeenUrls=new Set();feedSoundOn=false;feedCurrentIndex=Math.max(0,Math.min(vids.length-1,Number(startIndex)||0));
+  activeFeedItems=vids;feedSeenUrls=new Set();feedSoundOn=false;feedRoutePrefs=new Map();
+  feedCurrentIndex=Math.max(0,Math.min(vids.length-1,Number(startIndex)||0));
   $('#videoFeedTitle').textContent=title||'動画';syncVideoViewport();
   if(window.visualViewport){feedViewportHandler=syncVideoViewport;window.visualViewport.addEventListener('resize',feedViewportHandler);}
   $('#videoFeed').innerHTML=vids.map((x,i)=>videoSlideHTML(x,i)).join('');
   if(!$('#videoFeedDialog').open)$('#videoFeedDialog').showModal();
   setupVideoAutoplay(feedCurrentIndex);updateFeedSoundUI();
-  requestAnimationFrame(()=>requestAnimationFrame(()=>snapFeedToIndex(feedCurrentIndex)));
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{snapFeedToIndex(feedCurrentIndex);activateFeedIndex(feedCurrentIndex,true);}));
 }
 function openVideoFeed(){openVideoFeedItems(activeVideoItems(),activeChannel?.name||'動画',0);}
 function videoSlideHTML(x,i){
@@ -912,30 +990,53 @@ function videoSlideHTML(x,i){
   const proxyAttr=proxy&&proxy!==direct?' data-proxy-src="'+esc(proxy)+'"':'';
   const media=direct?'<video data-direct-src="'+esc(direct)+'"'+proxyAttr+(poster?' poster="'+esc(poster)+'"':'')+' data-feed-video="'+i+'" playsinline loop preload="none"></video>':'<div class="video-fallback"><div><strong>直接再生URLがありません</strong></div></div>';
   const source=x.deepDive?('深掘り · '+(x.deepSource||'関連')):(x.channelName||domainOf(x.url));
-  return '<section class="video-slide" data-feed-index="'+i+'">'+media+'<div class="video-progress"><input class="video-seek" data-feed-seek="'+i+'" type="range" min="0" max="0" step="0.1" value="0"><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
+  return '<section class="video-slide" data-feed-index="'+i+'">'+media+'<div class="video-error-panel"><strong>この動画を再生できません</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-progress"><input class="video-seek" data-feed-seek="'+i+'" type="range" min="0" max="0" step="0.1" value="0"><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>写真に保存</span></button><button class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
 }
 function setupVideoAutoplay(startIndex=0){
   const feed=$('#videoFeed'),vids=activeFeedItems,slides=$$('.video-slide',feed);
   slides.forEach(slide=>{
-    const i=Number(slide.dataset.feedIndex),item=vids[i],v=slide.querySelector('video');if(!v||!item)return;const key=item.videoUrl||item.url;
-    const cur=slide.querySelector('[data-feed-current]'),dur=slide.querySelector('[data-feed-duration]'),seek=slide.querySelector('[data-feed-seek]');
-    const tick=()=>{if(cur)cur.textContent=mediaTime(v.currentTime);if(dur&&Number.isFinite(v.duration))dur.textContent=mediaTime(v.duration);if(seek&&Number.isFinite(v.duration)){seek.max=String(v.duration);if(!seek.matches(':active'))seek.value=String(v.currentTime||0);}};
-    v.addEventListener('loadedmetadata',()=>{const p=Number(state.positions[key]||0);if(p>1&&Number.isFinite(v.duration)&&p<v.duration-2){try{v.currentTime=p;}catch{}}tick();});
-    v.addEventListener('timeupdate',tick);v.addEventListener('play',()=>slide.classList.add('is-playing'));v.addEventListener('pause',()=>slide.classList.remove('is-playing'));
-    v.addEventListener('error',()=>{if(v.dataset.releasing==='1')return;const p=v.dataset.proxySrc||'';if(p&&!v.dataset.proxyTried){v.dataset.proxyTried='1';v.src=p;try{v.load();}catch{}v.muted=!feedSoundOn;v.play().catch(()=>{});return;}slide.classList.add('video-load-error');});
+    const i=Number(slide.dataset.feedIndex),item=vids[i],v=slide.querySelector('video');if(!v||!item)return;
+    const key=item.videoUrl||item.url,cur=slide.querySelector('[data-feed-current]'),dur=slide.querySelector('[data-feed-duration]'),seek=slide.querySelector('[data-feed-seek]');
+    const tick=()=>{if(cur)cur.textContent=mediaTime(v.currentTime);if(dur&&Number.isFinite(v.duration))dur.textContent=mediaTime(v.duration);if(seek&&Number.isFinite(v.duration)){seek.max=String(v.duration);if(!seek.dataset.dragging)seek.value=String(v.currentTime||0);}};
+    v.addEventListener('loadedmetadata',()=>{
+      if(v.dataset.feedState==='released')return;
+      const p=Number(state.positions[key]||0);if(p>1&&Number.isFinite(v.duration)&&p<v.duration-2){try{v.currentTime=p;}catch{}}
+      tick();
+    });
+    v.addEventListener('canplay',()=>{
+      if(v.dataset.feedState==='released')return;
+      slide.classList.remove('video-buffering','video-load-error');
+      const route=v.dataset.currentRoute||'direct',direct=v.dataset.directSrc||'';
+      if(direct)feedRoutePrefs.set(direct,route);
+    });
+    v.addEventListener('waiting',()=>{if(v.dataset.feedState==='active')slide.classList.add('video-buffering');});
+    v.addEventListener('playing',()=>{slide.classList.remove('video-buffering','video-needs-tap');slide.classList.add('is-playing');});
+    v.addEventListener('timeupdate',tick);
+    v.addEventListener('pause',()=>slide.classList.remove('is-playing'));
+    v.addEventListener('error',()=>{
+      if(v.dataset.feedState==='released')return;
+      const direct=v.dataset.directSrc||'',proxy=v.dataset.proxySrc||'',route=v.dataset.currentRoute||'direct';
+      if(route==='direct'&&proxy&&!v.dataset.proxyTried){
+        v.dataset.proxyTried='1';feedRoutePrefs.set(direct,'proxy');slide.classList.add('video-buffering');
+        loadFeedSource(v,proxy,'proxy','active');
+        if(slide.classList.contains('is-current'))v.play().catch(()=>{});
+        return;
+      }
+      slide.classList.remove('video-buffering');slide.classList.add('video-load-error');
+    });
     v.addEventListener('ended',()=>{delete state.positions[key];saveState(false);});
   });
-  if(feedObserver){try{feedObserver.disconnect();}catch{}}
-  feedObserver=new IntersectionObserver(entries=>entries.forEach(e=>{
-    if(!(e.isIntersecting&&e.intersectionRatio>.62))return;
-    const slide=e.target,i=Number(slide.dataset.feedIndex),item=vids[i];
-    slides.forEach(s=>s.classList.toggle('is-current',s===slide));setFeedWindow(i);
-    if(item?.url&&!feedSeenUrls.has(item.url)){feedSeenUrls.add(item.url);recordHistory(item,false);}
-    const v=slide.querySelector('video');if(v){prepareFeedVideo(i);v.muted=!feedSoundOn;v.play().catch(()=>{v.muted=true;v.play().catch(()=>slide.classList.add('video-needs-tap'));});}
-    slides.forEach(s=>{if(s!==slide){try{s.querySelector('video')?.pause();}catch{}}});
-  }),{root:feed,threshold:[.25,.62,.9]});
-  slides.forEach(s=>feedObserver.observe(s));setFeedWindow(startIndex);
-  feed.onscroll=()=>{if(feedScrollTimer)clearTimeout(feedScrollTimer);feedScrollTimer=setTimeout(()=>{const h=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--video-vh'))||feed.clientHeight||1;const i=Math.max(0,Math.min(slides.length-1,Math.round(feed.scrollTop/h)));setFeedWindow(i);const top=slides[i]?.offsetTop??i*h;if(Math.abs(feed.scrollTop-top)>2)feed.scrollTo({top,behavior:'auto'});},140);};
+  if(feedObserver){try{feedObserver.disconnect();}catch{}feedObserver=null;}
+  if(feedScrollTimer){clearTimeout(feedScrollTimer);feedScrollTimer=null;}
+  activateFeedIndex(startIndex,true);
+  feed.onscroll=()=>{
+    if(feedScrollTimer)clearTimeout(feedScrollTimer);
+    feedScrollTimer=setTimeout(()=>{
+      const i=currentFeedIndexFromScroll(),slide=feedSlide(i);
+      if(slide&&Math.abs(feed.scrollTop-slide.offsetTop)>2)feed.scrollTo({top:slide.offsetTop,behavior:'auto'});
+      activateFeedIndex(i);
+    },190);
+  };
 }
 function openSearchResults(q){
   const needle=q.trim().toLowerCase(); if(!needle)return;
@@ -1029,6 +1130,7 @@ document.addEventListener('click',async e=>{
   const feedQuick=e.target.closest('[data-feed-quick-save]'); if(feedQuick&&feedSlide){await quickSave(activeFeedItems[Number(feedQuick.dataset.feedQuickSave)]);return;}
   const feedSave=e.target.closest('[data-feed-save]'); if(feedSave&&feedSlide){saveItem(activeFeedItems[Number(feedSave.dataset.feedSave)]);return;}
   const feedToggle=e.target.closest('[data-feed-toggle]'); if(feedToggle){const slide=feedToggle.closest('.video-slide');const v=slide?.querySelector('video');if(v){if(v.paused)v.play().catch(()=>{});else v.pause();}return;}
+  const feedRetry=e.target.closest('[data-feed-retry]'); if(feedRetry){const i=Number(feedRetry.dataset.feedRetry),slide=feedRetry.closest('.video-slide'),v=slide?.querySelector('video');if(v){feedRoutePrefs.delete(v.dataset.directSrc||'');delete v.dataset.proxyTried;releaseFeedVideoElement(v);slide?.classList.remove('video-load-error');activateFeedIndex(i,true);}return;}
   const feedSource=e.target.closest('[data-feed-source-open]'); if(feedSource){const item=activeFeedItems[Number(feedSource.dataset.feedSourceOpen)];if(item?.url)window.open(item.url,'_blank','noopener');return;}
   const lib=e.target.closest('[data-open-library]'); if(lib){const [kind,idxStr]=lib.dataset.openLibrary.split(':');const arr=kind==='saved'?state.saved:state.history;openItem(arr[Number(idxStr)]);return;}
   const rem=e.target.closest('[data-remove-saved]'); if(rem){removeSavedAt(Number(rem.dataset.removeSaved));return;}
@@ -1048,10 +1150,23 @@ document.addEventListener('error',e=>{
 
 document.addEventListener('input',e=>{
   const seek=e.target.closest?.('[data-feed-seek]'); if(!seek)return;
+  seek.dataset.dragging='1';
   const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); if(!v||!Number.isFinite(v.duration))return;
   const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
-  try{v.currentTime=next;}catch{}
   const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
+});
+document.addEventListener('change',e=>{
+  const seek=e.target.closest?.('[data-feed-seek]'); if(!seek)return;
+  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); delete seek.dataset.dragging;
+  if(!v||!Number.isFinite(v.duration))return;
+  const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
+  slide?.classList.add('video-buffering');
+  try{
+    if(typeof v.fastSeek==='function')v.fastSeek(next);else v.currentTime=next;
+  }catch{try{v.currentTime=next;}catch{}}
+  const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
+  const done=()=>slide?.classList.remove('video-buffering');
+  v.addEventListener('seeked',done,{once:true});setTimeout(done,3500);
 });
 
 // Initial launch
