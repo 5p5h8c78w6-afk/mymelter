@@ -492,7 +492,7 @@ function buildBrowserImportBookmarklet(){
 var R=${returnUrl};
 var A=function(u,b){try{return new URL(u,b||location.href).href}catch(e){return''}};
 var X=function(e){return((e&&(e.innerText||e.textContent))||'').replace(new RegExp('\\\\s+','g'),' ').trim()};
-var G=function(img,base){if(!img)return'';var raw=img.currentSrc||img.getAttribute('src')||img.getAttribute('data-src')||img.getAttribute('data-original')||img.getAttribute('data-lazy-src')||'';if(!raw){var ss=img.getAttribute('srcset')||img.getAttribute('data-srcset')||'';raw=(ss.split(',')[0]||'').trim().split(' ')[0]||''}return A(raw,base)};
+var G=function(img,base){if(!img)return'';var raw=img.getAttribute('data-src')||img.getAttribute('src')||img.getAttribute('data-original')||img.getAttribute('data-lazy-src')||img.currentSrc||'';if(!raw){var ss=img.getAttribute('srcset')||img.getAttribute('data-srcset')||'';raw=(ss.split(',')[0]||'').trim().split(' ')[0]||''}return A(raw,base)};
 var MID=function(u){var m=String(u||'').match(new RegExp('(?:^|/)([0-9]{12,})(?:/|$)'));return m?m[1]:''};
 var S={},I=[];
 var D=function(t,u,p,m,r,k){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var key=k||m||u;if(!u||u.indexOf('http')!==0||!key||S[key])return;S[key]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
@@ -847,7 +847,7 @@ async function quickSave(item){
     try{
       toast('メディアファイルを準備中…');
       const blob=await fetchMediaBlob(target),ext=mediaFileExtension(target,blob.type),name=`MyMelter_${Date.now()}.${ext}`;
-      const file=new File([blob],name,{type:blob.type||undefined});
+      const file=new File([blob],name,{type:blob.type||'application/octet-stream'});
       if(navigator.share&&navigator.canShare?.({files:[file]})){
         await navigator.share({title:item.title||'MyMelter',files:[file]}); return;
       }
@@ -1201,14 +1201,15 @@ function commitFeedSeek(seek){
   if(!v||!Number.isFinite(v.duration))return;
   const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
   slide?.classList.add('video-buffering');
+  let finished=false;
   const finish=()=>{
+    if(finished)return;finished=true;
     slide?.classList.remove('video-buffering');
     if(wasPlaying){v.muted=!feedSoundOn;v.play().catch(()=>{});}
   };
   try{v.currentTime=next;}catch{finish();return;}
   const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
-  const done=()=>{v.removeEventListener('seeked',done);finish();};
-  v.addEventListener('seeked',done,{once:true});setTimeout(done,3000);
+  v.addEventListener('seeked',finish,{once:true});setTimeout(finish,3000);
 }
 document.addEventListener('pointerdown',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)beginFeedSeek(seek);});
 document.addEventListener('touchstart',e=>{const seek=e.target.closest?.('[data-feed-seek]');if(seek)beginFeedSeek(seek);},{passive:true});
