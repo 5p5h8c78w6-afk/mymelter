@@ -537,19 +537,50 @@ var parseGeneric=function(doc,base){
 };
 var parseAll=function(doc,base){parseTw(doc,base);parseGeneric(doc,base);parseRaw(doc,base)};
 var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},8000);fr.style.cssText='position:fixed!important;left:-10000px!important;top:0!important;width:2px!important;height:2px!important;opacity:.01!important;pointer-events:none!important;border:0!important';fr.onload=function(){if(done)return;setTimeout(function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)},250)};fr.src=url;document.body.appendChild(fr)})};
-parseAll(document,location.href);
+var pageSeen={},rankQueue=[],creatorQueue=[];
+var enqueuePage=function(arr,u){if(!u||pageSeen[u])return;pageSeen[u]=1;arr.push(u)};
+var discoverDeepLinks=function(doc,base){
+  [].slice.call(doc.querySelectorAll('a[href]')).forEach(function(a){
+    var h=A(a.getAttribute('href'),base);if(!h)return;
+    try{
+      var u=new URL(h);
+      if(u.origin!==location.origin||u.pathname.indexOf('/jp/')!==0)return;
+      var p=u.pathname.toLowerCase();
+      if(p.indexOf('ranking_')>=0&&p.slice(-4)==='.php')enqueuePage(rankQueue,u.href);
+      else if(p.indexOf('/creator.php')>=0&&u.searchParams.get('id'))enqueuePage(creatorQueue,u.href);
+    }catch(e){}
+  })
+};
+var loadDoc=async function(url){
+  try{var rr=await fetch(url,{credentials:'include',cache:'no-store'});if(rr.ok){var tx=await rr.text();return new DOMParser().parseFromString(tx,'text/html')}}catch(e){}
+  return await iframeDoc(url)
+};
+var parsePage=function(doc,url){
+  if(!doc)return;
+  var before=I.length;parseAll(doc,url);
+  var label=(doc.title||'').replace(new RegExp('\\s+','g'),' ').trim();
+  for(var z=before;z<I.length;z++)I[z].z=label;
+  discoverDeepLinks(doc,url)
+};
+pageSeen[location.href]=1;
+parsePage(document,location.href);
+var primaryEnd=I.length;
 var p=location.pathname,extra='',lk=document.querySelector('a[href*="ranking_t2.php"],a[href*="ranking_t1.php"]');
 if(lk)extra=A(lk.getAttribute('href'),location.href);
 if(!extra){if(p.indexOf('ranking_t1.php')>=0||p.indexOf('ranking_t.php')>=0)extra=A('ranking_t2.php',location.href);else if(p.indexOf('ranking_t2.php')>=0)extra=A('ranking_t1.php',location.href)}
-if(extra&&extra!==location.href){
-  var dd=null;
-  try{var rr=await fetch(extra,{credentials:'include',cache:'no-store'});if(rr.ok){var tx=await rr.text();dd=new DOMParser().parseFromString(tx,'text/html')}}catch(e){}
-  if(!dd)dd=await iframeDoc(extra);
-  if(dd)parseAll(dd,extra)
+if(extra&&!pageSeen[extra]){pageSeen[extra]=1;rankQueue.unshift(extra)}
+var processed=0;
+while(rankQueue.length&&processed<8&&I.length<70){
+  var next=rankQueue.shift(),dd=await loadDoc(next);if(dd)parsePage(dd,next);processed++
 }
-I=I.slice(0,50);
-if(!I.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:8,s:location.href,n:document.title,i:I};
+var creators=0;
+while(creatorQueue.length&&creators<3&&I.length<80){
+  var cu=creatorQueue.shift(),cd=await loadDoc(cu);if(cd)parsePage(cd,cu);creators++
+}
+var primary=I.slice(0,primaryEnd),deep=I.slice(primaryEnd);
+I=I.slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
+if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
+var P={v:9,s:location.href,n:document.title,i:primary,d:deep};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -561,7 +592,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='連続取込 v8。1〜10位に加え11〜20位ページも同一Safari内で自動取得を再強化しました。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='深掘り取込 v9。現在のランキング一覧はそのまま保存し、11〜20位・週間・月間・関連ランキング・取得可能な投稿者別ページを動画タブ専用の深掘りフィードへ追加します。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
