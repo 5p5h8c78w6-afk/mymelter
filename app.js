@@ -176,7 +176,7 @@ function renderHomeChannels(){
   root.innerHTML=state.channels.slice(0,8).map(c=>`
     <button class="channel-card ${esc(c.color||colorForType(c.type))}" data-open-channel="${esc(c.id)}">
       <span>${channelIconHTML(c)}<strong>${esc(c.name)}</strong><small>${esc(domainOf(c.url))}</small></span>
-      <span class="meta">${esc(typeLabel(c.type))} · ${Number(c.itemCount||0)}件</span>
+      <span class="meta">${esc(typeLabel(c.type))} · ${Number(c.itemCount||0)}件${Array.isArray(c.deepDiveItems)&&c.deepDiveItems.length?` · 深掘り${c.deepDiveItems.length}`:''}</span>
     </button>`).join('');
 }
 function renderCandidates(){
@@ -237,7 +237,7 @@ function renderChannelManager(){
   root.innerHTML=list.map(c=>`
     <article class="manager-card">
       ${managerVisualHTML(c)}
-      <div class="manager-main"><strong>${esc(c.name)}</strong><small>${esc(typeLabel(c.type))} · ${esc(c.url)}</small></div>
+      <div class="manager-main"><strong>${esc(c.name)}</strong><small>${esc(typeLabel(c.type))}${Array.isArray(c.deepDiveItems)&&c.deepDiveItems.length?` · 深掘り${c.deepDiveItems.length}動画`:''} · ${esc(c.url)}</small></div>
       <div class="manager-actions"><button class="icon-action" data-open-channel="${esc(c.id)}">開く</button><button class="icon-action" data-edit-channel="${esc(c.id)}">編集</button></div>
     </article>`).join('');
 }
@@ -629,26 +629,29 @@ function consumeBrowserImportHash(){
     const rawSource=normalizeUrl(payload?.s||''); if(!rawSource) throw new Error('取込元URLが不正です');
     const source=canonicalBrowserSourceUrl(rawSource);
     const title=String(payload?.n||domainOf(source)||'Safari取込').trim().slice(0,120);
-    const incoming=(Array.isArray(payload?.i)?payload.i:[]).map(x=>{
+    const mapImported=(arr,deep=false)=>(Array.isArray(arr)?arr:[]).map(x=>{
       const url=normalizeUrl(x?.u||''); const image=normalizeUrl(x?.i||''); const videoUrl=normalizeUrl(x?.m||'');
       if(!url&&!videoUrl)return null;
-      return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type:videoUrl?'video':image?'image':'article',browserRank:String(x?.r||'')};
+      return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type:videoUrl?'video':image?'image':'article',browserRank:String(x?.r||''),deepSource:String(x?.z||''),deepDive:!!deep};
     }).filter(Boolean);
-    const items=uniqueBy(incoming,x=>x.videoUrl||x.url).slice(0,80); if(!items.length) throw new Error('取り込める項目がありません');
+    const items=uniqueBy(mapImported(payload?.i,false),x=>x.videoUrl||x.url).slice(0,30);
+    const primaryKeys=new Set(items.map(x=>x.videoUrl||x.url));
+    const deepItems=uniqueBy(mapImported(payload?.d,true),x=>x.videoUrl||x.url).filter(x=>!primaryKeys.has(x.videoUrl||x.url)).slice(0,60);
+    if(!items.length&&!deepItems.length) throw new Error('取り込める項目がありません');
     let channel=state.channels.find(c=>c.source==='browser'&&canonicalBrowserSourceUrl(c.browserSourceUrl||c.url)===source);
     if(channel){
-      const map=new Map((channel.snapshotItems||[]).map(x=>[x.videoUrl||x.url,x]));
-      items.forEach(x=>map.set(x.videoUrl||x.url,x));
-      const merged=[...map.values()].sort((a,b)=>(Number(a.browserRank)||999)-(Number(b.browserRank)||999)).slice(0,80);
-      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.snapshotItems=merged; channel.itemCount=merged.length; channel.updatedAt=Date.now();
-      merged.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
-      rememberItems(merged);
+      const primary=items.length?items:(channel.snapshotItems||[]);
+      const deep=deepItems.length?deepItems:(channel.deepDiveItems||[]);
+      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.snapshotItems=primary; channel.deepDiveItems=deep; channel.itemCount=primary.length; channel.updatedAt=Date.now();
+      [...primary,...deep].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
+      rememberItems([...primary,...deep]);
     }else{
-      channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,snapshotItems:items,itemCount:items.length});
-      items.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;}); channel.snapshotItems=items; state.channels.unshift(channel); rememberItems(items);
+      channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,snapshotItems:items,deepDiveItems:deepItems,itemCount:items.length});
+      [...items,...deepItems].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
+      channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('Safariから'+items.length+'件取り込み・合計'+channel.snapshotItems.length+'件'+(Number(payload?.v||0)<8?'（取込コードv8へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件'+(Number(payload?.v||0)<9?'（取込コードv9へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
