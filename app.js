@@ -1,4 +1,4 @@
-const APP_VERSION = '1.2.6-DISCOVER';
+const APP_VERSION = '1.2.7-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -39,6 +39,9 @@ let feedSeenUrls = new Set();
 let activeFeedItems = [];
 let feedSoundOn = true;
 let feedViewportHandler = null;
+let feedObserver = null;
+let feedScrollTimer = null;
+let feedCurrentIndex = 0;
 let browserImportTarget = '';
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -147,7 +150,20 @@ function navigate(name){
   if(name==='saved') renderSaved();
 }
 
-function channelIconHTML(c){ return `<span class="channel-icon">${esc(typeGlyph(c.type))}</span>`; }
+function channelPreviewItem(c){
+  const items=Array.isArray(c?.snapshotItems)?c.snapshotItems:[];
+  return items.find(x=>x?.image)||items.find(x=>x?.videoUrl)||null;
+}
+function channelIconHTML(c){
+  const preview=channelPreviewItem(c);
+  if(preview?.image) return `<span class="channel-icon channel-icon-image"><img ${imageSourceAttrs(preview.image)} alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+  return `<span class="channel-icon">${esc(typeGlyph(c.type))}</span>`;
+}
+function managerVisualHTML(c){
+  const preview=channelPreviewItem(c);
+  if(preview?.image) return `<span class="manager-icon manager-thumb"><img ${imageSourceAttrs(preview.image)} alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+  return `<span class="manager-icon" style="background:${colorCss(c.color)}">${esc(typeGlyph(c.type))}</span>`;
+}
 function renderHomeChannels(){
   const root=$('#homeChannels');
   if(!state.channels.length){
@@ -217,7 +233,7 @@ function renderChannelManager(){
   if(!list.length){root.innerHTML=`<div class="empty-card">条件に一致するチャンネルがありません。</div>`;return;}
   root.innerHTML=list.map(c=>`
     <article class="manager-card">
-      <span class="manager-icon" style="background:${colorCss(c.color)}">${esc(typeGlyph(c.type))}</span>
+      ${managerVisualHTML(c)}
       <div class="manager-main"><strong>${esc(c.name)}</strong><small>${esc(typeLabel(c.type))} · ${esc(c.url)}</small></div>
       <div class="manager-actions"><button class="icon-action" data-open-channel="${esc(c.id)}">開く</button><button class="icon-action" data-edit-channel="${esc(c.id)}">編集</button></div>
     </article>`).join('');
@@ -708,6 +724,19 @@ function saveItem(item){
   const entry={...(prev||{}),...(cat||{}),...item,savedAt:Date.now(),viewCount:Math.max(Number(item.viewCount||0),Number(cat?.viewCount||0),Number(prev?.viewCount||0))};
   state.saved=[entry,...state.saved.filter(x=>x.url!==item.url)].slice(0,500); if(!cat)rememberItems([entry]); saveState(); toast('保存済みに追加しました');
 }
+function openActiveItem(index){
+  const item=activeItems[Number(index)];
+  if(!item)return;
+  if(item.videoUrl){
+    const vids=activeItems.filter(x=>x?.videoUrl);
+    const start=Math.max(0,vids.findIndex(x=>x===item||x.videoUrl===item.videoUrl));
+    recordHistory(item,false);
+    openVideoFeedItems(vids,activeChannel?.name||item.channelName||'動画',start);
+    return;
+  }
+  openItem(item);
+}
+
 function openItem(item){
   if(!item)return;
   if(item.videoUrl){
@@ -910,7 +939,7 @@ document.addEventListener('click',async e=>{
   const addC=e.target.closest('[data-add-candidate]'); if(addC){addCandidate(addC.dataset.addCandidate);return;}
   const addAll=e.target.closest('[data-add-all-candidates]'); if(addAll){addAllCandidates();return;}
   const prevC=e.target.closest('[data-preview-candidate]'); if(prevC){const c=state.candidates.find(x=>x.id===prevC.dataset.previewCandidate);if(c)openChannel(normalizeChannel(c));return;}
-  const activeOpen=e.target.closest('[data-active-open]'); if(activeOpen){openItem(activeItems[Number(activeOpen.dataset.activeOpen)]);return;}
+  const activeOpen=e.target.closest('[data-active-open]'); if(activeOpen){openActiveItem(Number(activeOpen.dataset.activeOpen));return;}
   const activeSave=e.target.closest('[data-active-save]'); if(activeSave){saveItem(activeItems[Number(activeSave.dataset.activeSave)]);return;}
   const activeQuick=e.target.closest('[data-active-quick-save]'); if(activeQuick){await quickSave(activeItems[Number(activeQuick.dataset.activeQuickSave)]);return;}
   const launch=e.target.closest('#launchVideoFeedBtn'); if(launch){openVideoFeed();return;}
