@@ -864,7 +864,7 @@ async function openVideoSaveGate(item){
   const d=ensureVideoSaveGate(),status=d.querySelector('[data-video-save-status]'),start=d.querySelector('[data-video-save-start]');
   d._item=item;status.textContent='Worker 1.3対応を確認中…';start.disabled=true;
   if(!d.open)d.showModal();
-  const cap=await probeWorkerDownloadCapability(true);
+  const cap=await probeWorkerDownloadCapability(!workerCapability.checked);
   status.textContent=safeSaveStatusMessage(cap);
   start.disabled=!cap.download;
 }
@@ -936,7 +936,9 @@ async function prepareDeviceSave(item){
     window.location.href=`shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(target)}`;return;
   }
   if(item?.videoUrl){
-    await openVideoSaveGate(item);
+    pauseFeedForExternalAction();
+    if(workerCapability.checked&&workerCapability.download)startVerifiedVideoDownload(item);
+    else await openVideoSaveGate(item);
     return;
   }
   const d=ensureMediaSaveDialog(),status=d.querySelector('[data-media-save-status]'),share=d.querySelector('[data-media-share]'),preview=d.querySelector('[data-media-save-preview]');
@@ -948,8 +950,7 @@ async function prepareDeviceSave(item){
     pendingMediaShare={file,objectUrl,title:item.title||'MyMelter'};
     status.textContent='準備完了。「共有して保存」を押してください。';share.disabled=false;
   }catch(e){
-    console.warn('image save prepare failed',e);status.textContent='画像の準備に失敗しました。Safariで開きます。';share.disabled=true;
-    setTimeout(()=>openStreamingDeviceSave(item),300);
+    console.warn('image save prepare failed',e);status.textContent='画像の準備に失敗しました。再試行してください。';share.disabled=true;
   }
 }
 
