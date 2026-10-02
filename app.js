@@ -533,7 +533,7 @@ var parseGeneric=function(doc,base){
   })
 };
 var parseAll=function(doc,base){parseTw(doc,base);parseGeneric(doc,base);parseRaw(doc,base)};
-var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},5000);fr.style.cssText='display:none!important';fr.onload=function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)};fr.src=url;document.body.appendChild(fr)})};
+var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},8000);fr.style.cssText='position:fixed!important;left:-10000px!important;top:0!important;width:2px!important;height:2px!important;opacity:.01!important;pointer-events:none!important;border:0!important';fr.onload=function(){if(done)return;setTimeout(function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)},250)};fr.src=url;document.body.appendChild(fr)})};
 parseAll(document,location.href);
 var p=location.pathname,extra='',lk=document.querySelector('a[href*="ranking_t2.php"],a[href*="ranking_t1.php"]');
 if(lk)extra=A(lk.getAttribute('href'),location.href);
@@ -546,7 +546,7 @@ if(extra&&extra!==location.href){
 }
 I=I.slice(0,50);
 if(!I.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:7,s:location.href,n:document.title,i:I};
+var P={v:8,s:location.href,n:document.title,i:I};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -558,7 +558,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='メディア安定化 v7。DOMで正しく対応付けたタイトル・サムネイルを最優先し、全HTML抽出は取りこぼし時だけ使います。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='連続取込 v8。1〜10位に加え11〜20位ページも同一Safari内で自動取得を再強化しました。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -576,13 +576,24 @@ function decodeBrowserImportPayload(encoded){
   const bin=atob(decodeURIComponent(encoded)); const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
   return JSON.parse(new TextDecoder().decode(bytes));
 }
+function canonicalBrowserSourceUrl(url){
+  const normalized=normalizeUrl(url); if(!normalized)return '';
+  try{
+    const u=new URL(normalized);
+    if(/(^|\.)twidouga\.net$/i.test(u.hostname)&&/\/jp\/ranking_t(?:1|2)?\.php$/i.test(u.pathname)){
+      u.pathname='/jp/ranking_t1.php';u.search='';u.hash='';return u.href;
+    }
+  }catch{}
+  return normalized;
+}
 function consumeBrowserImportHash(){
   if(!location.hash.startsWith('#mmimport=')) return null;
   const raw=location.hash.slice('#mmimport='.length);
   history.replaceState(null,'',location.pathname+location.search);
   try{
     const payload=decodeBrowserImportPayload(raw);
-    const source=normalizeUrl(payload?.s||''); if(!source) throw new Error('取込元URLが不正です');
+    const rawSource=normalizeUrl(payload?.s||''); if(!rawSource) throw new Error('取込元URLが不正です');
+    const source=canonicalBrowserSourceUrl(rawSource);
     const title=String(payload?.n||domainOf(source)||'Safari取込').trim().slice(0,120);
     const incoming=(Array.isArray(payload?.i)?payload.i:[]).map(x=>{
       const url=normalizeUrl(x?.u||''); const image=normalizeUrl(x?.i||''); const videoUrl=normalizeUrl(x?.m||'');
@@ -590,16 +601,20 @@ function consumeBrowserImportHash(){
       return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type:videoUrl?'video':image?'image':'article',browserRank:String(x?.r||'')};
     }).filter(Boolean);
     const items=uniqueBy(incoming,x=>x.videoUrl||x.url).slice(0,80); if(!items.length) throw new Error('取り込める項目がありません');
-    let channel=state.channels.find(c=>c.source==='browser'&&c.browserSourceUrl===source);
+    let channel=state.channels.find(c=>c.source==='browser'&&canonicalBrowserSourceUrl(c.browserSourceUrl||c.url)===source);
     if(channel){
-      channel.name=title; channel.url=source; channel.snapshotItems=items; channel.itemCount=items.length; channel.updatedAt=Date.now();
-      items.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
+      const map=new Map((channel.snapshotItems||[]).map(x=>[x.videoUrl||x.url,x]));
+      items.forEach(x=>map.set(x.videoUrl||x.url,x));
+      const merged=[...map.values()].sort((a,b)=>(Number(a.browserRank)||999)-(Number(b.browserRank)||999)).slice(0,80);
+      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.snapshotItems=merged; channel.itemCount=merged.length; channel.updatedAt=Date.now();
+      merged.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
+      rememberItems(merged);
     }else{
       channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,snapshotItems:items,itemCount:items.length});
-      items.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;}); channel.snapshotItems=items; state.channels.unshift(channel);
+      items.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;}); channel.snapshotItems=items; state.channels.unshift(channel); rememberItems(items);
     }
-    rememberItems(items); state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('Safariから'+items.length+'件取り込みました'+(Number(payload?.v||0)<4?'（取込コードv7へ更新してください）':''));
+    state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
+    toast('Safariから'+items.length+'件取り込み・合計'+channel.snapshotItems.length+'件'+(Number(payload?.v||0)<8?'（取込コードv8へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
