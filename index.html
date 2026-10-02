@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7fbff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="MyMelter" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icons/icon-180.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>MyMelter</title>
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <header class="app-header">
+    <div class="brand-row">
+      <button class="brand" data-nav="home" aria-label="ホーム">
+        <span class="brand-mark">M</span>
+        <span><strong>MyMelter</strong><small>好きなものを、ひとつの場所に。</small></span>
+      </button>
+      <div class="header-actions">
+        <button id="installBtn" class="round-btn" hidden title="ホーム画面に追加">＋</button>
+        <button class="round-btn" data-nav="settings" title="設定">☷</button>
+      </div>
+    </div>
+    <div class="global-search-wrap">
+      <span class="search-icon">⌕</span>
+      <input id="globalSearch" type="search" placeholder="チャンネル・サイト・キーワードで検索" autocomplete="off" />
+      <button id="clearGlobalSearch" class="clear-search" hidden>×</button>
+    </div>
+  </header>
+
+  <main id="appMain">
+    <section id="view-home" class="view active" data-view="home">
+      <div class="section-title-row">
+        <h2>チャンネル</h2>
+        <button class="link-btn" data-nav="channels">すべて見る ›</button>
+      </div>
+      <div id="homeChannels" class="channel-grid"></div>
+      <button id="homeAddChannel" class="add-channel-card">
+        <span class="plus-circle">＋</span>
+        <span><strong>チャンネルを追加</strong><small>URLを貼ると、追加候補を自動解析します</small></span>
+      </button>
+
+      <div class="section-title-row rec-head">
+        <div class="title-with-chip"><h2>おすすめチャンネル</h2><span class="chip">✦ 自動検出された候補</span></div>
+        <button id="discoverBtn" class="link-btn">自動で探す ›</button>
+      </div>
+      <div id="candidateList" class="candidate-row"></div>
+
+      <div class="section-title-row">
+        <h2>最近見たもの</h2>
+        <button class="link-btn" data-nav="history">すべて見る ›</button>
+      </div>
+      <div id="recentStrip" class="media-strip"></div>
+
+      <div class="section-title-row">
+        <h2>保存済み</h2>
+        <button class="link-btn" data-nav="saved">すべて見る ›</button>
+      </div>
+      <div id="savedStrip" class="media-strip"></div>
+
+      <button id="discoverBanner" class="discover-banner">
+        <span class="compass">◈</span>
+        <span><strong>新しい発見を、もっと。</strong><small>サイトURLからチャンネル候補を自動で見つけます。</small></span>
+        <span class="banner-cta">チャンネルを追加</span>
+      </button>
+    </section>
+
+    <section id="view-channels" class="view" data-view="channels">
+      <div class="page-head">
+        <div><p class="eyebrow">CHANNELS</p><h1>チャンネル</h1></div>
+        <button id="channelsAddBtn" class="primary">＋ 追加</button>
+      </div>
+      <div class="toolbar-card">
+        <input id="channelFilter" type="search" placeholder="チャンネルを絞り込み" />
+        <select id="channelTypeFilter">
+          <option value="all">すべて</option>
+          <option value="video">動画</option>
+          <option value="image">画像</option>
+          <option value="article">記事</option>
+          <option value="mixed">混在</option>
+          <option value="feed">RSS/Atom</option>
+        </select>
+      </div>
+      <div id="channelManager" class="channel-list"></div>
+    </section>
+
+    <section id="view-history" class="view" data-view="history">
+      <div class="page-head">
+        <div><p class="eyebrow">HISTORY</p><h1>履歴</h1></div>
+        <button id="clearHistoryBtn" class="danger-link">すべて消去</button>
+      </div>
+      <div id="historyList" class="library-list"></div>
+    </section>
+
+    <section id="view-saved" class="view" data-view="saved">
+      <div class="page-head"><div><p class="eyebrow">SAVED</p><h1>保存済み</h1></div></div>
+      <div class="toolbar-card">
+        <input id="savedFilter" type="search" placeholder="保存済みを検索" />
+        <select id="savedTypeFilter">
+          <option value="all">すべて</option>
+          <option value="video">動画</option>
+          <option value="image">画像</option>
+          <option value="article">記事</option>
+        </select>
+      </div>
+      <div id="savedList" class="library-list"></div>
+    </section>
+
+    <section id="view-settings" class="view" data-view="settings">
+      <div class="page-head"><div><p class="eyebrow">SETTINGS</p><h1>設定</h1></div></div>
+
+      <div class="settings-group">
+        <h3>サイト取得</h3>
+        <label class="field"><span>取得モード</span>
+          <select id="fetchMode">
+            <option value="auto">自動（直接 → Worker）</option>
+            <option value="direct">直接取得のみ</option>
+            <option value="proxy">Workerのみ</option>
+          </select>
+        </label>
+        <label class="field"><span>Cloudflare Worker URL</span><input id="proxyUrl" type="url" placeholder="https://xxxx.workers.dev" /></label>
+        <label class="field"><span>Workerキー（任意）</span><input id="proxyKey" type="password" placeholder="MYMELTER_KEY" autocomplete="off" /></label>
+        <p class="help">GitHub Pagesから直接読めないサイトだけ無料Workerを使えます。キーはこの端末内だけに保存されます。</p>
+      </div>
+
+      <div class="settings-group">
+        <h3>クイック保存</h3>
+        <label class="toggle-row"><span><strong>Appleショートカットを使う</strong><small>保存ボタンから「MyMelter保存」を起動</small></span><input id="shortcutEnabled" type="checkbox" /></label>
+        <label class="field"><span>ショートカット名</span><input id="shortcutName" value="MyMelter保存" /></label>
+        <p class="help">未設定の場合は共有シート／通常ダウンロードへフォールバックします。DRMやアクセス制限の回避は行いません。</p>
+      </div>
+
+      <div class="settings-group">
+        <h3>データ</h3>
+        <div class="button-row">
+          <button id="exportBtn" class="secondary">バックアップを書き出す</button>
+          <label class="secondary file-btn">バックアップを読み込む<input id="importInput" type="file" accept="application/json" hidden /></label>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>このアプリ</h3>
+        <p class="help">MyMelter PWA 1.0 COMPLETE<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="メインナビゲーション">
+    <button class="nav-item active" data-nav="home"><span>⌂</span><small>ホーム</small></button>
+    <button class="nav-item" data-nav="channels"><span>▦</span><small>チャンネル</small></button>
+    <button class="nav-item" data-nav="history"><span>◷</span><small>履歴</small></button>
+    <button class="nav-item" data-nav="saved"><span>♡</span><small>保存済み</small></button>
+    <button class="nav-item" data-nav="settings"><span>⚙</span><small>設定</small></button>
+  </nav>
+
+  <dialog id="discoverDialog" class="sheet-dialog">
+    <form method="dialog" class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><div><p class="eyebrow">AUTO DISCOVERY</p><h2>チャンネルを自動で探す</h2></div><button class="round-btn" value="cancel">×</button></div>
+      <p class="sheet-lead">サイトのURLを1つ貼ると、RSS/Atom・カテゴリ・タグ・メディア一覧候補を探します。</p>
+      <div class="discover-input-row">
+        <input id="discoverUrl" type="url" placeholder="https://example.com/" autocomplete="url" />
+        <button id="runDiscoveryBtn" type="button" class="primary">解析</button>
+      </div>
+      <div id="discoverStatus" class="status-line"></div>
+      <div id="discoverResults" class="discover-results"></div>
+    </form>
+  </dialog>
+
+  <dialog id="channelDialog" class="sheet-dialog">
+    <form id="channelForm" class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><div><p class="eyebrow">CHANNEL EDITOR</p><h2 id="channelDialogTitle">チャンネル追加</h2></div><button id="channelCloseBtn" type="button" class="round-btn">×</button></div>
+      <input id="channelId" type="hidden" />
+      <div class="form-grid">
+        <label class="field"><span>名前</span><input id="channelName" required placeholder="例：新着動画" /></label>
+        <label class="field"><span>URL</span><input id="channelUrl" type="url" required placeholder="https://example.com/videos" /></label>
+        <label class="field"><span>種類</span>
+          <select id="channelType">
+            <option value="mixed">自動 / 混在</option>
+            <option value="video">動画</option>
+            <option value="image">画像</option>
+            <option value="article">記事</option>
+            <option value="feed">RSS / Atom</option>
+          </select>
+        </label>
+        <label class="field"><span>色</span>
+          <select id="channelColor"><option value="blue">ブルー</option><option value="red">レッド</option><option value="green">グリーン</option><option value="purple">パープル</option><option value="gold">ゴールド</option></select>
+        </label>
+      </div>
+      <details class="advanced">
+        <summary>高度な抽出設定</summary>
+        <div class="form-grid advanced-grid">
+          <label class="field"><span>アイテム selector</span><input id="itemSelector" placeholder="article, .post" /></label>
+          <label class="field"><span>タイトル selector</span><input id="titleSelector" placeholder="h2, .title" /></label>
+          <label class="field"><span>画像 selector</span><input id="imageSelector" placeholder="img" /></label>
+          <label class="field"><span>リンク selector</span><input id="linkSelector" placeholder="a" /></label>
+          <label class="field"><span>動画 selector</span><input id="videoSelector" placeholder="video, source" /></label>
+          <label class="field"><span>検索URL</span><input id="searchUrl" placeholder="https://example.com/?q={keyword}" /></label>
+        </div>
+      </details>
+      <div class="button-row split-actions">
+        <button id="deleteChannelBtn" type="button" class="danger-secondary" hidden>削除</button>
+        <div class="grow"></div>
+        <button id="testChannelBtn" type="button" class="secondary">テスト</button>
+        <button type="submit" class="primary">保存</button>
+      </div>
+      <div id="channelTestStatus" class="status-line"></div>
+    </form>
+  </dialog>
+
+  <dialog id="readerDialog" class="fullscreen-dialog">
+    <div class="reader-screen">
+      <header class="reader-header">
+        <button id="readerCloseBtn" class="round-btn">‹</button>
+        <div class="reader-heading"><p id="readerDomain" class="eyebrow"></p><h2 id="readerChannelName">チャンネル</h2></div>
+        <button id="readerEditBtn" class="round-btn">⋯</button>
+      </header>
+      <div class="reader-toolbar">
+        <div class="segmented" id="readerModeTabs">
+          <button data-reader-mode="list" class="active">一覧</button>
+          <button data-reader-mode="media">メディア</button>
+          <button data-reader-mode="video">動画</button>
+        </div>
+        <div class="channel-search-row">
+          <input id="readerSearch" type="search" placeholder="このチャンネルを検索" />
+          <button id="readerSearchBtn" class="secondary">検索</button>
+        </div>
+      </div>
+      <div id="readerStatus" class="reader-status"></div>
+      <div id="readerContent" class="reader-content"></div>
+    </div>
+  </dialog>
+
+  <dialog id="videoFeedDialog" class="video-dialog">
+    <div class="video-feed-shell">
+      <div class="video-feed-top"><button id="videoFeedClose" class="video-close">×</button><strong id="videoFeedTitle">動画</strong><span></span></div>
+      <div id="videoFeed" class="video-feed"></div>
+    </div>
+  </dialog>
+
+  <dialog id="searchDialog" class="sheet-dialog">
+    <div class="sheet search-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><div><p class="eyebrow">SEARCH</p><h2>検索結果</h2></div><button id="searchCloseBtn" class="round-btn">×</button></div>
+      <div id="searchResults" class="search-results"></div>
+    </div>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>

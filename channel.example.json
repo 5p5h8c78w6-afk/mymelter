@@ -1,0 +1,14 @@
+{
+  "name": "サンプル動画チャンネル",
+  "url": "https://example.com/videos/",
+  "type": "video",
+  "color": "red",
+  "searchUrl": "https://example.com/search?q={keyword}",
+  "selectors": {
+    "item": "article.video-card",
+    "title": ".title",
+    "image": "img",
+    "link": "a",
+    "video": "video@src"
+  }
+}
