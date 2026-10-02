@@ -51,3 +51,8 @@ dialog{border:0;padding:0;background:transparent}.sheet-dialog{width:min(720px,1
 @media(max-width:390px){.discover-panel{padding:11px}.local-only-note{font-size:9px;padding:5px 7px}.rank-card{padding:7px}.collection-bar{align-items:flex-start}.collection-bar>.mini-primary{padding-left:9px;padding-right:9px}}
 
 #workerTestBtn{min-height:48px;touch-action:manipulation;pointer-events:auto;-webkit-user-select:none;user-select:none}#workerTestBtn:active{transform:scale(.985)}#workerTestBtn.is-testing,#workerTestBtn:disabled{opacity:.72;cursor:wait}#workerTestStatus{font-weight:700}
+
+/* MyMelter 1.1.4 — iPhone Safari Worker test hardening */
+.worker-test-row{position:relative;z-index:30;pointer-events:auto}
+#workerTestBtn{position:relative;z-index:31;pointer-events:auto!important;-webkit-appearance:none;appearance:none;touch-action:manipulation}
+#workerTestStatus{min-height:22px;margin-top:8px;color:#58708f}
