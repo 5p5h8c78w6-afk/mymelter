@@ -490,7 +490,7 @@ var R=${returnUrl};
 var A=function(u,b){try{return new URL(u,b||location.href).href}catch(e){return''}};
 var X=function(e){return((e&&(e.innerText||e.textContent))||'').replace(new RegExp('\\\\s+','g'),' ').trim()};
 var S={},I=[];
-var D=function(t,u,p,m,r){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var k=m||u;if(!u||u.indexOf('http')!==0||!k||S[k])return;S[k]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
+var D=function(t,u,p,m,r,k){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var key=k||m||u;if(!u||u.indexOf('http')!==0||!key||S[key])return;S[key]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
 var collect=function(txt,pat){var out=[],re=new RegExp(pat,'g'),m;while((m=re.exec(String(txt||'')))!==null){out.push(m[0]);if(!m[0])re.lastIndex++}return out};
 var texts=function(doc){var body=X(doc.body),r=[],sv=[],m,re1=new RegExp('第\\\\s*(\\\\d+)\\\\s*位','g'),re2=new RegExp('(\\\\d+)\\\\s*回保存','g');while((m=re1.exec(body))!==null)r.push(m[1]);while((m=re2.exec(body))!==null)sv.push(m[1]);return{r:r,s:sv}};
 var postList=function(doc,base){return [].slice.call(doc.querySelectorAll('a[href*="x.com/"][href*="/status/"],a[href*="twitter.com/"][href*="/status/"],a[href*="twitter.com/i/status/"]')).map(function(a){return{u:A(a.getAttribute('href'),base),t:X(a)}})};
@@ -511,7 +511,7 @@ var parseTw=function(doc,base){
       n=n.previousSibling;h++
     }
     var qm=txt.match(new RegExp('(?:第\\\\s*)?(\\\\d+)\\\\s*位')),sm=txt.match(new RegExp('(\\\\d+)\\\\s*回保存')),rn=qm?qm[1]:String(j+1),sv=sm?sm[1]:'',lab='第'+rn+'位'+(sv?' · '+sv+'回保存':'');
-    D(pt?lab+'｜'+pt:lab,post||v,im,v,rn)
+    D(pt?lab+'｜'+pt:lab,post||v,im,v,rn,base+'#rank='+rn)
   })
 };
 var parseRaw=function(doc,base){
@@ -525,8 +525,8 @@ var parseRaw=function(doc,base){
   ims.forEach(function(v){v=A(v,base);if(v&&!seenI[v]){seenI[v]=1;images.push(v)}});
   videos.forEach(function(v,j){
     var rn=ts.r[j]||String(j+1),sv=ts.s[j]||'',lab='第'+rn+'位'+(sv?' · '+sv+'回保存':'');
-    var pt=ps[j]&&ps[j].t?ps[j].t:'',src=ps[j]&&ps[j].u?ps[j].u:v,im=images[j]||'';
-    D(pt?lab+'｜'+pt:lab,src,im,v,rn)
+    var pt=ps[j]&&ps[j].t?ps[j].t:'',src=ps[j]&&ps[j].u?ps[j].u:v;
+    D(pt?lab+'｜'+pt:lab,src,'',v,rn)
   })
 };
 var parseGeneric=function(doc,base){
@@ -535,7 +535,7 @@ var parseGeneric=function(doc,base){
     D(X(c).slice(0,180)||doc.title,(a&&A(a.getAttribute('href'),base))||url,g?A(g.getAttribute('src')||g.getAttribute('data-src')||g.currentSrc,base):'',url,'')
   })
 };
-var parseAll=function(doc,base){parseTw(doc,base);parseGeneric(doc,base);parseRaw(doc,base)};
+var parseAll=function(doc,base){var before=I.length;parseTw(doc,base);if(I.length===before)parseGeneric(doc,base);if(I.length===before)parseRaw(doc,base)};
 var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},8000);fr.style.cssText='position:fixed!important;left:-10000px!important;top:0!important;width:2px!important;height:2px!important;opacity:.01!important;pointer-events:none!important;border:0!important';fr.onload=function(){if(done)return;setTimeout(function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)},250)};fr.src=url;document.body.appendChild(fr)})};
 var pageSeen={},rankQueue=[],creatorQueue=[];
 var enqueuePage=function(arr,u){if(!u||pageSeen[u])return;pageSeen[u]=1;arr.push(u)};
@@ -634,8 +634,9 @@ function consumeBrowserImportHash(){
       if(!url&&!videoUrl)return null;
       return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type:videoUrl?'video':image?'image':'article',browserRank:String(x?.r||''),deepSource:String(x?.z||''),deepDive:!!deep};
     }).filter(Boolean);
-    const items=uniqueBy(mapImported(payload?.i,false),x=>x.videoUrl||x.url).slice(0,30);
-    const primaryKeys=new Set(items.map(x=>x.videoUrl||x.url));
+    const primaryRaw=mapImported(payload?.i,false);
+    const items=uniqueBy(primaryRaw,x=>x.browserRank?('rank:'+x.browserRank):(x.id||x.videoUrl||x.url)).slice(0,30);
+    const primaryKeys=new Set(items.map(x=>x.videoUrl||x.url).filter(Boolean));
     const deepItems=uniqueBy(mapImported(payload?.d,true),x=>x.videoUrl||x.url).filter(x=>!primaryKeys.has(x.videoUrl||x.url)).slice(0,60);
     if(!items.length&&!deepItems.length) throw new Error('取り込める項目がありません');
     let channel=state.channels.find(c=>c.source==='browser'&&canonicalBrowserSourceUrl(c.browserSourceUrl||c.url)===source);
@@ -747,8 +748,12 @@ async function openChannel(channel,keyword=''){
 }
 function activeVideoItems(){
   const primary=(activeItems||[]).filter(x=>x?.videoUrl);
-  const deep=activeChannel&&Array.isArray(activeChannel.deepDiveItems)?activeChannel.deepDiveItems.filter(x=>x?.videoUrl):[];
-  return uniqueBy([...primary,...deep],x=>x.videoUrl||x.url);
+  const seen=new Set(primary.map(x=>x.videoUrl||x.url).filter(Boolean));
+  const deep=activeChannel&&Array.isArray(activeChannel.deepDiveItems)?activeChannel.deepDiveItems.filter(x=>{
+    if(!x?.videoUrl)return false;
+    const key=x.videoUrl||x.url;if(!key||seen.has(key))return false;seen.add(key);return true;
+  }):[];
+  return [...primary,...deep];
 }
 function setReaderMode(mode,render=true){ activeReaderMode=mode; $$('#readerModeTabs button').forEach(b=>b.classList.toggle('active',b.dataset.readerMode===mode)); if(render)renderReader(); }
 function renderReader(){
@@ -787,7 +792,10 @@ function openActiveItem(index){
   if(!item)return;
   if(item.videoUrl){
     const vids=activeVideoItems();
-    const start=Math.max(0,vids.findIndex(x=>x===item||x.videoUrl===item.videoUrl));
+    let start=vids.findIndex(x=>x.id&&item.id&&x.id===item.id);
+    if(start<0&&item.browserRank)start=vids.findIndex(x=>x.browserRank===item.browserRank&&x.videoUrl===item.videoUrl);
+    if(start<0)start=vids.findIndex(x=>x===item);
+    start=Math.max(0,start);
     recordHistory(item,false);
     openVideoFeedItems(vids,activeChannel?.name||item.channelName||'動画',start);
     return;
