@@ -1,4 +1,4 @@
-const APP_VERSION = '1.3.0-DISCOVER';
+const APP_VERSION = '1.3.1-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -585,7 +585,7 @@ while(creatorQueue.length&&creators<3&&I.length<80){
 var primary=I.slice(0,primaryEnd),deep=I.slice(primaryEnd);
 I=I.slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
 if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:11,s:location.href,n:document.title,i:primary,d:deep};
+var P={v:12,s:location.href,n:document.title,i:primary,d:deep};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -597,7 +597,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='メディアID対応 v11。動画URLと画像URLの共通IDでサムネイルを対応付け、順位IDも維持します。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='操作レイヤー・プレビュー v12。メディアIDサムネイル対応を維持し、動画操作ボタンとシークプレビューを改善しました。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -657,7 +657,7 @@ function consumeBrowserImportHash(){
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件'+(Number(payload?.v||0)<11?'（取込コードv11へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件'+(Number(payload?.v||0)<12?'（取込コードv12へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -1039,7 +1039,7 @@ function setupVideoAutoplay(startIndex=0){
       const route=v.dataset.currentRoute||'direct',direct=v.dataset.directSrc||'';
       if(direct)feedRoutePrefs.set(direct,route);
     });
-    v.addEventListener('waiting',()=>{if(v.dataset.feedState==='active')slide.classList.add('video-buffering');});
+    v.addEventListener('waiting',()=>{const seek=slide.querySelector('[data-feed-seek]');if(v.dataset.feedState==='active'&&seek?.dataset.dragging!=='1')slide.classList.add('video-buffering');});
     v.addEventListener('playing',()=>{slide.classList.remove('video-buffering','video-needs-tap');slide.classList.add('is-playing');});
     v.addEventListener('timeupdate',tick);
     v.addEventListener('pause',()=>slide.classList.remove('is-playing'));
@@ -1185,30 +1185,70 @@ document.addEventListener('error',e=>{
   img.classList.add('media-image-error');
 },true);
 
+function seekPreviewBox(seek){return seek?.closest('.video-progress')?.querySelector('.seek-preview')||null;}
+function drawSeekPreviewFrame(seek,v){
+  const box=seekPreviewBox(seek),canvas=box?.querySelector('canvas'); if(!box||!canvas||!v)return;
+  try{
+    const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const vw=v.videoWidth||160,vh=v.videoHeight||90,ratio=Math.max(canvas.width/vw,canvas.height/vh);
+    const dw=vw*ratio,dh=vh*ratio,dx=(canvas.width-dw)/2,dy=(canvas.height-dh)/2;
+    ctx.drawImage(v,dx,dy,dw,dh);box.classList.add('has-frame');
+  }catch{}
+}
+function scheduleSeekPreviewFrame(seek,v,target){
+  if(!seek||!v||seek.dataset.dragging!=='1')return;
+  seek._previewTarget=target;
+  if(seek._previewBusy)return;
+  const now=performance.now(),wait=Math.max(0,180-(now-(seek._previewLast||0)));
+  clearTimeout(seek._previewTimer);
+  seek._previewTimer=setTimeout(()=>{
+    if(seek.dataset.dragging!=='1')return;
+    seek._previewBusy=true;seek._previewLast=performance.now();
+    const token=(seek._previewToken||0)+1;seek._previewToken=token;
+    const t=Number(seek._previewTarget)||0;
+    const done=()=>{
+      if(token===seek._previewToken)drawSeekPreviewFrame(seek,v);
+      seek._previewBusy=false;
+      if(seek.dataset.dragging==='1'&&Math.abs((Number(seek._previewTarget)||0)-t)>.15)scheduleSeekPreviewFrame(seek,v,Number(seek._previewTarget)||0);
+    };
+    v.addEventListener('seeked',done,{once:true});
+    try{v.currentTime=t;}catch{seek._previewBusy=false;}
+  },wait);
+}
 function beginFeedSeek(seek){
   if(!seek||seek.dataset.dragging==='1')return;
-  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video');
+  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'),box=seekPreviewBox(seek);
   seek.dataset.dragging='1';
   seek.dataset.wasPlaying=v&&!v.paused?'1':'0';
   if(v&&!v.paused){try{v.pause();}catch{}}
+  if(box)box.classList.add('is-visible');
 }
 function previewFeedSeek(seek){
   const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'); if(!v||!Number.isFinite(v.duration))return;
   const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
   const current=slide.querySelector('[data-feed-current]'); if(current)current.textContent=mediaTime(next);
   const pct=v.duration?next/v.duration*100:0;seek.style.setProperty('--seek-pct',pct+'%');
+  const box=seekPreviewBox(seek),ptime=box?.querySelector('[data-feed-preview-time]');
+  if(box){box.style.left=pct+'%';box.classList.add('is-visible');}
+  if(ptime)ptime.textContent=mediaTime(next);
+  scheduleSeekPreviewFrame(seek,v,next);
 }
 function commitFeedSeek(seek){
   if(!seek||seek.dataset.dragging!=='1')return;
-  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video');
-  const wasPlaying=seek.dataset.wasPlaying==='1'; delete seek.dataset.dragging; delete seek.dataset.wasPlaying;
-  if(!v||!Number.isFinite(v.duration))return;
+  const slide=seek.closest('.video-slide'),v=slide?.querySelector('video'),box=seekPreviewBox(seek);
+  const wasPlaying=seek.dataset.wasPlaying==='1';
+  delete seek.dataset.dragging; delete seek.dataset.wasPlaying;
+  clearTimeout(seek._previewTimer);seek._previewToken=(seek._previewToken||0)+1;seek._previewBusy=false;
+  if(!v||!Number.isFinite(v.duration)){box?.classList.remove('is-visible');return;}
   const next=Math.max(0,Math.min(v.duration,Number(seek.value)||0));
   slide?.classList.add('video-buffering');
   let finished=false;
   const finish=()=>{
     if(finished)return;finished=true;
     slide?.classList.remove('video-buffering');
+    drawSeekPreviewFrame(seek,v);
+    setTimeout(()=>box?.classList.remove('is-visible'),120);
     if(wasPlaying){v.muted=!feedSoundOn;v.play().catch(()=>{});}
   };
   try{v.currentTime=next;}catch{finish();return;}
