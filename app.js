@@ -1,4 +1,4 @@
-const APP_VERSION = '1.2.4-DISCOVER';
+const APP_VERSION = '1.2.5-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -472,72 +472,65 @@ var A=function(u,b){try{return new URL(u,b||location.href).href}catch(e){return'
 var X=function(e){return((e&&(e.innerText||e.textContent))||'').replace(new RegExp('\\\\s+','g'),' ').trim()};
 var S={},I=[];
 var D=function(t,u,p,m,r){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var k=m||u;if(!u||u.indexOf('http')!==0||!k||S[k])return;S[k]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
+var collect=function(txt,pat){var out=[],re=new RegExp(pat,'g'),m;while((m=re.exec(String(txt||'')))!==null){out.push(m[0]);if(!m[0])re.lastIndex++}return out};
+var texts=function(doc){var body=X(doc.body),r=[],sv=[],m,re1=new RegExp('第\\\\s*(\\\\d+)\\\\s*位','g'),re2=new RegExp('(\\\\d+)\\\\s*回保存','g');while((m=re1.exec(body))!==null)r.push(m[1]);while((m=re2.exec(body))!==null)sv.push(m[1]);return{r:r,s:sv}};
+var postList=function(doc,base){return [].slice.call(doc.querySelectorAll('a[href*="x.com/"][href*="/status/"],a[href*="twitter.com/"][href*="/status/"],a[href*="twitter.com/i/status/"]')).map(function(a){return{u:A(a.getAttribute('href'),base),t:X(a)}})};
 var parseTw=function(doc,base){
   var boxes=[].slice.call(doc.querySelectorAll('.gazou'));
   boxes.forEach(function(box,j){
     var a=box.querySelector('.poster > a[href^="https://video.twimg.com/"],a[href^="https://video.twimg.com/"]');
     if(!a)return;
-    var v=A(a.getAttribute('href'),base);
-    var g=a.querySelector('img')||box.querySelector('img');
-    var im=g?A(g.getAttribute('src')||g.getAttribute('data-src')||g.currentSrc,base):'';
+    var v=A(a.getAttribute('href'),base),g=a.querySelector('img')||box.querySelector('img'),im=g?A(g.getAttribute('src')||g.getAttribute('data-src')||g.currentSrc,base):'';
     var n=box.previousSibling,txt='',post='',pt='',h=0;
     while(n&&h<18){
       if(n.nodeType===1&&n.classList&&n.classList.contains('gazou'))break;
-      var z=n.nodeType===3?String(n.nodeValue||''):X(n);
-      if(z)txt=z+' '+txt;
+      var z=n.nodeType===3?String(n.nodeValue||''):X(n);if(z)txt=z+' '+txt;
       if(n.nodeType===1&&!post){
         var pa=(n.matches&&n.matches('a[href*="twitter.com/"],a[href*="x.com/"]'))?n:(n.querySelector?n.querySelector('a[href*="twitter.com/"],a[href*="x.com/"]'):null);
         if(pa){post=A(pa.getAttribute('href'),base);pt=X(pa)}
       }
       n=n.previousSibling;h++
     }
-    var qm=txt.match(new RegExp('(?:第\\\\s*)?(\\\\d+)\\\\s*位'));
-    var sm=txt.match(new RegExp('(\\\\d+)\\\\s*回保存'));
-    var rn=qm?qm[1]:String(j+1),sv=sm?sm[1]:'';
-    var lab='第'+rn+'位'+(sv?' · '+sv+'回保存':'');
-    var title=pt?(lab+'｜'+pt):lab;
-    D(title,post||v,im,v,rn)
+    var qm=txt.match(new RegExp('(?:第\\\\s*)?(\\\\d+)\\\\s*位')),sm=txt.match(new RegExp('(\\\\d+)\\\\s*回保存')),rn=qm?qm[1]:String(j+1),sv=sm?sm[1]:'',lab='第'+rn+'位'+(sv?' · '+sv+'回保存':'');
+    D(pt?lab+'｜'+pt:lab,post||v,im,v,rn)
+  })
+};
+var parseRaw=function(doc,base){
+  var html=doc.documentElement?doc.documentElement.innerHTML:'';
+  var vs=collect(html,"https?:\\\\/\\\\/video\\\\.twimg\\\\.com\\\\/[^\\\"'<>\\\\s)]+");
+  var ims=collect(html,"https?:\\\\/\\\\/pbs\\\\.twimg\\\\.com\\\\/[^\\\"'<>\\\\s)]+");
+  var ps=postList(doc,base),ts=texts(doc);
+  var seen={},videos=[];
+  vs.forEach(function(v){v=A(v,base);if(v&&!seen[v]){seen[v]=1;videos.push(v)}});
+  var seenI={},images=[];
+  ims.forEach(function(v){v=A(v,base);if(v&&!seenI[v]){seenI[v]=1;images.push(v)}});
+  videos.forEach(function(v,j){
+    var rn=ts.r[j]||String(j+1),sv=ts.s[j]||'',lab='第'+rn+'位'+(sv?' · '+sv+'回保存':'');
+    var pt=ps[j]&&ps[j].t?ps[j].t:'',src=ps[j]&&ps[j].u?ps[j].u:v,im=images[j]||'';
+    D(pt?lab+'｜'+pt:lab,src,im,v,rn)
   })
 };
 var parseGeneric=function(doc,base){
   [].slice.call(doc.querySelectorAll('video[src],source[src],a[href*="video.twimg.com"]')).forEach(function(v){
-    var raw=v.getAttribute('src')||v.getAttribute('href')||'',url=A(raw,base);
-    var c=v.closest('article,li,section,div')||v.parentElement||v;
-    var g=c&&c.querySelector?c.querySelector('img'):null;
-    var a=c&&c.querySelector?c.querySelector('a[href]'):null;
+    var raw=v.getAttribute('src')||v.getAttribute('href')||'',url=A(raw,base),c=v.closest('article,li,section,div')||v.parentElement||v,g=c&&c.querySelector?c.querySelector('img'):null,a=c&&c.querySelector?c.querySelector('a[href]'):null;
     D(X(c).slice(0,180)||doc.title,(a&&A(a.getAttribute('href'),base))||url,g?A(g.getAttribute('src')||g.getAttribute('data-src')||g.currentSrc,base):'',url,'')
   })
 };
-var iframeDoc=async function(url){
-  return await new Promise(function(resolve){
-    var fr=document.createElement('iframe'),done=false;
-    var t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},5000);
-    fr.style.cssText='display:none!important';
-    fr.onload=function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)};
-    fr.src=url;document.body.appendChild(fr)
-  })
-};
-parseTw(document,location.href);
-if(!I.length)parseGeneric(document,location.href);
-var p=location.pathname,extra='';
-var lk=document.querySelector('a[href*="ranking_t2.php"],a[href*="ranking_t1.php"]');
+var parseAll=function(doc,base){parseTw(doc,base);parseRaw(doc,base);parseGeneric(doc,base)};
+var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},5000);fr.style.cssText='display:none!important';fr.onload=function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)};fr.src=url;document.body.appendChild(fr)})};
+parseAll(document,location.href);
+var p=location.pathname,extra='',lk=document.querySelector('a[href*="ranking_t2.php"],a[href*="ranking_t1.php"]');
 if(lk)extra=A(lk.getAttribute('href'),location.href);
-if(!extra){
-  if(p.indexOf('ranking_t1.php')>=0||p.indexOf('ranking_t.php')>=0)extra=A('ranking_t2.php',location.href);
-  else if(p.indexOf('ranking_t2.php')>=0)extra=A('ranking_t1.php',location.href)
-}
+if(!extra){if(p.indexOf('ranking_t1.php')>=0||p.indexOf('ranking_t.php')>=0)extra=A('ranking_t2.php',location.href);else if(p.indexOf('ranking_t2.php')>=0)extra=A('ranking_t1.php',location.href)}
 if(extra&&extra!==location.href){
   var dd=null;
-  try{
-    var rr=await fetch(extra,{credentials:'include',cache:'no-store'});
-    if(rr.ok){var tx=await rr.text();dd=new DOMParser().parseFromString(tx,'text/html')}
-  }catch(e){}
+  try{var rr=await fetch(extra,{credentials:'include',cache:'no-store'});if(rr.ok){var tx=await rr.text();dd=new DOMParser().parseFromString(tx,'text/html')}}catch(e){}
   if(!dd)dd=await iframeDoc(extra);
-  if(dd){parseTw(dd,extra);if(I.length<10)parseGeneric(dd,extra)}
+  if(dd)parseAll(dd,extra)
 }
 I=I.slice(0,50);
 if(!I.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:5,s:location.href,n:document.title,i:I};
+var P={v:6,s:location.href,n:document.title,i:I};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -549,7 +542,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='タイトル・サムネイル改善 v5。既存の「MyMelter取込」は、この最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='回帰修正 v6。v4の全HTMLフォールバックを復活し、v5のタイトル・サムネイル紐付けも維持しています。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -590,7 +583,7 @@ function consumeBrowserImportHash(){
       items.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;}); channel.snapshotItems=items; state.channels.unshift(channel);
     }
     rememberItems(items); state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('Safariから'+items.length+'件取り込みました'+(Number(payload?.v||0)<4?'（取込コードv5へ更新してください）':''));
+    toast('Safariから'+items.length+'件取り込みました'+(Number(payload?.v||0)<4?'（取込コードv6へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
