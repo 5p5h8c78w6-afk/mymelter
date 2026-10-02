@@ -173,7 +173,7 @@ function renderCandidates(){
     </article>`).join('')+`<article class="candidate-card"><div class="candidate-top"><span class="mini-icon">＋</span><span><strong>候補をまとめて追加</strong><small>未登録URLだけ追加します</small></span></div><div class="candidate-actions"><button class="mini-primary" data-add-all-candidates>まとめて追加</button></div></article>`;
 }
 function thumbHTML(item, cls='media-thumb'){
-  if(item.image) return `<div class="${cls}"><img src="${esc(item.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<span class=placeholder>◇</span>'"><span class="media-badge">${esc(typeLabel(mediaKind(item)))}</span></div>`;
+  if(item.image) return `<div class="${cls}"><img src="${esc(mediaProxyUrl(item.image))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<span class=placeholder>◇</span>'"><span class="media-badge">${esc(typeLabel(mediaKind(item)))}</span></div>`;
   return `<div class="${cls}"><span class="placeholder">${esc(typeGlyph(mediaKind(item)))}</span><span class="media-badge">${esc(typeLabel(mediaKind(item)))}</span></div>`;
 }
 function renderStrip(root, items, kind){
@@ -225,7 +225,7 @@ function renderChannelManager(){
 function colorCss(color){ return ({blue:'linear-gradient(135deg,#1677ff,#57a5ff)',red:'linear-gradient(135deg,#ff525f,#ff8b91)',green:'linear-gradient(135deg,#21b77f,#63d7ae)',purple:'linear-gradient(135deg,#7456ed,#a68ffb)',gold:'linear-gradient(135deg,#eba91b,#ffd467)'})[color]||'linear-gradient(135deg,#1677ff,#57a5ff)'; }
 
 function libraryItemHTML(x,index,kind){
-  const thumb=x.image?`<img class="library-thumb" src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="library-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
+  const thumb=x.image?`<img class="library-thumb" src="${esc(mediaProxyUrl(x.image))}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="library-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
   const pos=Number(state.positions[x.videoUrl||x.url]||0); const details=[];
   if(x.visitedAt) details.push(fmtDate(x.visitedAt)); if(Number(x.viewCount||0)>1) details.push(`${Number(x.viewCount)}回閲覧`); if(pos>1) details.push(`続き ${fmtDuration(pos)}`);
   return `<article class="library-item">${thumb}<div class="library-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(x.channelName||domainOf(x.url))}${details.length?` · ${esc(details.join(' · '))}`:''}</small></div><div class="library-actions"><button class="icon-action" data-open-library="${kind}:${index}">開く</button>${kind==='saved'?`<button class="icon-action" data-collection-item="${index}">リスト</button><button class="icon-action" data-remove-saved="${index}">削除</button>`:`<button class="icon-action" data-save-history="${index}">保存</button>`}</div></article>`;
@@ -698,11 +698,11 @@ function renderReader(){
   root.innerHTML=`<div class="content-list">${activeItems.map((x,i)=>contentItemHTML(x,i)).join('')}</div>`;
 }
 function contentItemHTML(x,i){
-  const th=x.image?`<img class="content-thumb" src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="content-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
+  const th=x.image?`<img class="content-thumb" src="${esc(mediaProxyUrl(x.image))}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="content-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
   return `<article class="content-card">${th}<div class="content-copy"><strong>${esc(x.title||'無題')}</strong><small>${esc(typeLabel(mediaKind(x)))} · ${esc(domainOf(x.url))}</small><div class="content-actions"><button class="open-btn" data-active-open="${i}">開く</button><button class="save-btn" data-active-save="${i}">♡ 保存済み</button>${x.videoUrl||x.image?`<button class="save-btn" data-active-quick-save="${i}">⇩ 端末保存</button>`:''}</div></div></article>`;
 }
 function gridItemHTML(x,i){
-  const media=x.image?`<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:x.videoUrl?`<video src="${esc(x.videoUrl)}" muted playsinline preload="metadata"></video>`:`<div class="content-placeholder" style="width:100%;aspect-ratio:1/1">◇</div>`;
+  const media=x.image?`<img src="${esc(mediaProxyUrl(x.image))}" alt="" loading="lazy" referrerpolicy="no-referrer">`:x.videoUrl?`<video src="${esc(x.videoUrl)}" muted playsinline preload="metadata"></video>`:`<div class="content-placeholder" style="width:100%;aspect-ratio:1/1">◇</div>`;
   return `<article class="grid-card">${media}<div class="grid-copy"><strong>${esc(x.title||'無題')}</strong><div class="grid-actions"><button data-active-open="${i}">開く</button><button data-active-save="${i}">保存</button><button data-active-quick-save="${i}">端末へ</button></div></div></article>`;
 }
 function recordHistory(item,render=true){
