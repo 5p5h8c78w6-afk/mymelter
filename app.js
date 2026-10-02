@@ -1,4 +1,4 @@
-const APP_VERSION = '1.1.1-DISCOVER';
+const APP_VERSION = '1.1.2-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 
@@ -339,17 +339,24 @@ async function fetchProxyOnce(url){
   }
   return await r.text();
 }
+let workerTestBusy=false;
 async function testWorkerConnection(){
-  const status=$('#workerTestStatus'); const base=state.settings.proxyUrl.trim().replace(/\/+$/,'');
+  const status=$('#workerTestStatus'); const btn=$('#workerTestBtn');
+  if(workerTestBusy)return;
+  const base=state.settings.proxyUrl.trim().replace(/\/+$/,'');
   if(!base){status.textContent='Worker URLが未設定です。';return;}
-  status.textContent='Workerへ接続しています…'; $('#workerTestBtn').disabled=true;
+  workerTestBusy=true; status.textContent='Workerへ接続しています…'; btn.disabled=true; btn.classList.add('is-testing');
+  const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),8000);
   try{
     const u=new URL(base); u.searchParams.set('url','https://example.com/'); if(state.settings.proxyKey)u.searchParams.set('key',state.settings.proxyKey);
-    const r=await fetch(u.href,{credentials:'omit'}); const version=r.headers.get('X-MyMelter-Worker-Version')||'旧版/不明'; const errorCode=r.headers.get('X-MyMelter-Error')||'';
+    const r=await fetch(u.href,{credentials:'omit',signal:controller.signal}); const version=r.headers.get('X-MyMelter-Worker-Version')||'旧版/不明'; const errorCode=r.headers.get('X-MyMelter-Error')||'';
     if(r.ok) status.textContent=`接続PASS · Worker ${version}${version==='1.1'?' · 403診断対応':''}`;
     else status.textContent=`接続できましたが HTTP ${r.status} · Worker ${version}${errorCode?` · ${errorCode}`:''}`;
-  }catch(e){status.textContent=`接続FAIL：${e.message}`;}
-  finally{$('#workerTestBtn').disabled=false;}
+  }catch(e){
+    status.textContent=e?.name==='AbortError'?'接続FAIL：8秒以内に応答がありません。Worker URLまたはCloudflare側を確認してください。':`接続FAIL：${e.message}`;
+  }finally{
+    clearTimeout(timer); workerTestBusy=false; btn.disabled=false; btn.classList.remove('is-testing');
+  }
 }
 
 async function fetchProxy(url){
@@ -650,7 +657,8 @@ $('#clearGlobalSearch').onclick=()=>{$('#globalSearch').value='';$('#clearGlobal
 $('#fetchMode').onchange=e=>{state.settings.fetchMode=e.target.value;saveState(false);};
 $('#proxyUrl').oninput=e=>{state.settings.proxyUrl=e.target.value.trim();saveState(false);};
 $('#proxyKey').oninput=e=>{state.settings.proxyKey=e.target.value;saveState(false);};
-$('#workerTestBtn').onclick=testWorkerConnection;
+const workerTestButton=$('#workerTestBtn');
+workerTestButton.addEventListener('click',e=>{e.preventDefault();testWorkerConnection();});
 $('#shortcutEnabled').onchange=e=>{state.settings.shortcutEnabled=e.target.checked;saveState(false);};
 $('#shortcutName').oninput=e=>{state.settings.shortcutName=e.target.value.trim()||'MyMelter保存';saveState(false);};
 $('#exportBtn').onclick=exportState; $('#importInput').onchange=async e=>{if(!e.target.files?.[0])return;try{await importState(e.target.files[0]);toast('バックアップを読み込みました');}catch{toast('バックアップを読み込めませんでした');}e.target.value='';};
