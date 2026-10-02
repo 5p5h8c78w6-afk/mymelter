@@ -1,4 +1,4 @@
-const APP_VERSION = '1.1.2-DISCOVER';
+const APP_VERSION = '1.1.3-DISCOVER';
 const STORE_KEY = 'mymelter-state-v2';
 const OLD_STORE_KEY = 'mymelter-state-v1';
 

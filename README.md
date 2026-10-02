@@ -1,4 +1,4 @@
-# MyMelter PWA 1.1 DISCOVER
+# MyMelter PWA 1.1.3 DISCOVER
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -108,4 +108,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.1 DISCOVER`
+`MyMelter PWA 1.1.3 DISCOVER`
