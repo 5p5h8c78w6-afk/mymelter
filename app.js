@@ -384,15 +384,16 @@ async function fetchDirect(url){
   const r=await fetch(url,{method:'GET',mode:'cors',credentials:'omit',redirect:'follow',headers:{'Accept':'text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.5'}});
   if(!r.ok) throw new Error(`HTTP ${r.status}`); return await r.text();
 }
-function alternatePublicUrl(url){
-  try{
-    const u=new URL(url);
-    if(/(^|\.)twidouga\.net$/i.test(u.hostname)&&/^\/jp\/ranking\/?$/i.test(u.pathname)){
-      u.pathname='/jp/ranking_t1.php'; u.search=''; u.hash=''; return u.href;
-    }
-  }catch{}
-  return '';
-}
+const SITE_ADAPTERS=[
+  {
+    id:'twidouga',
+    match:url=>{try{return /(^|\.)twidouga\.net$/i.test(new URL(url).hostname)}catch{return false}},
+    alternate:url=>{try{const u=new URL(url);if(/^\/jp\/ranking\/?$/i.test(u.pathname)){u.pathname='/jp/ranking_t1.php';u.search='';u.hash='';return u.href}}catch{}return''},
+    canonical:url=>{try{const u=new URL(url);if(/\/jp\/ranking_t(?:1|2)?\.php$/i.test(u.pathname)){u.pathname='/jp/ranking_t1.php';u.search='';u.hash='';}return u.href}catch{return''}}
+  }
+];
+function siteAdapterFor(url){return SITE_ADAPTERS.find(a=>a.match(url))||null;}
+function alternatePublicUrl(url){return siteAdapterFor(url)?.alternate?.(url)||'';}
 function workerErrorMessage(status,errorCode,upstreamStatus,finalUrl){
   if(errorCode==='worker-key'||status===401) return 'Workerキーが一致していません。設定のWorkerキーを確認してください。';
   if(errorCode==='target-blocked') return 'Workerの安全設定でこのURLへの接続を拒否しました。';
@@ -889,14 +890,8 @@ function decodeBrowserImportPayload(encoded){
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 function canonicalBrowserSourceUrl(url){
-  const normalized=normalizeUrl(url); if(!normalized)return '';
-  try{
-    const u=new URL(normalized);
-    if(/(^|\.)twidouga\.net$/i.test(u.hostname)&&/\/jp\/ranking_t(?:1|2)?\.php$/i.test(u.pathname)){
-      u.pathname='/jp/ranking_t1.php';u.search='';u.hash='';return u.href;
-    }
-  }catch{}
-  return normalized;
+  const normalized=normalizeUrl(url);if(!normalized)return '';
+  const adapter=siteAdapterFor(normalized);return adapter?.canonical?.(normalized)||normalized;
 }
 function consumeBrowserImportHash(){
   if(!location.hash.startsWith('#mmimport=')) return null;
