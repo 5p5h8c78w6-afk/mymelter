@@ -1,5 +1,12 @@
 // Run with Playwright installed, or NODE_PATH pointing at the desktop runtime packages.
 const {chromium}=require('playwright'),fs=require('node:fs'),http=require('node:http'),assert=require('node:assert/strict');
+const FIXTURES={
+  videoRanking:fs.readFileSync(__dirname+'/fixtures/video-ranking.html','utf8'),
+  articleThread:fs.readFileSync(__dirname+'/fixtures/article-thread.html','utf8'),
+  articleStandard:fs.readFileSync(__dirname+'/fixtures/article-standard.html','utf8'),
+  imageGallery:fs.readFileSync(__dirname+'/fixtures/image-gallery.html','utf8'),
+  mixed:fs.readFileSync(__dirname+'/fixtures/mixed.html','utf8')
+};
 (async()=>{const server=http.createServer((req,res)=>{let path=new URL(req.url,'http://localhost').pathname;if(path==='/')path='/index.html';try{const b=fs.readFileSync(__dirname+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.json')?'application/json':path.endsWith('.png')?'image/png':'text/html');res.end(b);}catch{res.statusCode=404;res.end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 try{browser=await chromium.launch({headless:true,...(process.env.MYMELTER_BROWSER_CHANNEL?{channel:process.env.MYMELTER_BROWSER_CHANNEL}:{})});const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.addInitScript(()=>localStorage.setItem('mymelter-state-v2',JSON.stringify({channels:[{id:'a',name:'動画サイト',type:'video',url:'https://video.example/',createdAt:123,custom:'keep'},{id:'b',name:'技術ブログ',type:'article',url:'https://tech.example/',genre:'ブログ'}],saved:[{url:'https://saved.example/',title:'保存'}],settings:{proxyUrl:'',proxyKey:'keep-key'}})));
