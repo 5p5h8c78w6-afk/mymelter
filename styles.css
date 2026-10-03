@@ -435,3 +435,34 @@ main,.view,.channel-list{max-width:100%;min-width:0}
 .clean-reader-actions{position:fixed;left:12px;right:12px;bottom:calc(10px + var(--safe-bottom));z-index:4;display:flex;gap:8px;padding:10px;border-radius:18px;background:rgba(255,255,255,.94);backdrop-filter:blur(18px);box-shadow:0 8px 28px rgba(24,48,78,.16)}.clean-reader-actions button{flex:1}
 .image-viewer-title{min-width:0;flex:1;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.image-viewer-stage{flex:1;min-height:0;display:grid;place-items:center;background:#0a0a0a;overflow:auto;touch-action:pan-y pinch-zoom}.image-viewer-stage img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.image-viewer-actions{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:8px;padding:10px 12px calc(10px + var(--safe-bottom));background:#fff;border-top:1px solid var(--line)}.image-viewer-actions button:disabled{opacity:.35}
 @media(max-width:600px){.clean-reader-body{padding:18px 18px 118px}.clean-reader-body p{font-size:16px;line-height:1.85}.clean-reader-body h2{font-size:20px}.clean-reader-actions{left:8px;right:8px}.image-viewer-actions{grid-template-columns:1fr 1.25fr 1fr}}
+
+
+/* MyMelter 1.5.4 — reader toolbar scrolls with content */
+.reader-screen{
+  height:100dvh;
+  max-height:100dvh;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+  touch-action:pan-y;
+}
+.reader-header{
+  position:sticky;
+  top:0;
+  z-index:40;
+  flex:0 0 auto;
+}
+.reader-toolbar{
+  position:static;
+  flex:0 0 auto;
+}
+.reader-status{
+  flex:0 0 auto;
+}
+.reader-content{
+  flex:none;
+  overflow:visible;
+  min-height:calc(100dvh - 180px);
+  padding-bottom:calc(28px + var(--safe-bottom));
+}
