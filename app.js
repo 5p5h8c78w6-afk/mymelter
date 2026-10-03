@@ -518,9 +518,9 @@ var collectRelated=function(doc,base){
   [].slice.call(doc.querySelectorAll('a[href]')).forEach(function(a){
     var u=A(a.getAttribute('href'),base),n=X(a).slice(0,100),p;try{p=new URL(u)}catch(e){return}
     if(!u||!n||!/^https?:$/.test(p.protocol)||p.origin===origin||p.username||p.password||ES[p.hostname])return;
-    if(/(^|\.)((x|twitter)\.com|t\.co|video\.twimg\.com|pbs\.twimg\.com)$/i.test(p.hostname))return;
+    if(/(^|\\.)((x|twitter)\\.com|t\\.co|video\\.twimg\\.com|pbs\\.twimg\\.com)$/i.test(p.hostname))return;
     var sig=(n+' '+u+' '+X(a.parentElement).slice(0,240)).toLowerCase();
-    if(/\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|[?#])/i.test(u)||/ログイン|privacy|利用規約|広告|login|sign.?up|share|facebook\.com\/sharer|twitter\.com\/intent|x\.com\/intent/i.test(sig))return;
+    if(/\\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|[?#])/i.test(u)||/ログイン|privacy|利用規約|広告|login|sign.?up|share|facebook\\.com\\/sharer|twitter\\.com\\/intent|x\\.com\\/intent/i.test(sig))return;
     ES[p.hostname]=1;E.push({n:n,u:p.href});
   })
 };
