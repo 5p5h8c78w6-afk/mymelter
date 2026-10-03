@@ -1429,7 +1429,8 @@ function extractReadableArticle(text,url,hintTitle=''){
     blocks.push(...commentBlocks);
     textLength+=commentBlocks.reduce((n,x)=>n+(x.text?.length||0),0);
   }
-  return {title,blocks,textLength,commentCount:commentBlocks.length};
+  const totalCommentCount=blocks.filter(x=>x.kind==='comment').length;
+  return {title,blocks,textLength,commentCount:totalCommentCount};
 }
 function articleBlocksHTML(article){
   return article.blocks.map(b=>{
