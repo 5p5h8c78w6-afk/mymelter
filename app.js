@@ -1112,6 +1112,92 @@ function openActiveItem(index){
   openItem(item);
 }
 
+function extractReadableArticle(text,url,hintTitle=''){
+  const doc=new DOMParser().parseFromString(text,'text/html');
+  doc.querySelectorAll('script,style,noscript,iframe,form,nav,footer,header,aside,[hidden],[aria-hidden="true"]').forEach(x=>x.remove());
+  [...doc.querySelectorAll('*')].filter(adLikeElement).forEach(x=>x.remove());
+  const candidates=[...doc.querySelectorAll('article,[role="main"],main,.entry-content,.post-content,.article-body,.story-body,.article-content,.post-body')];
+  let root=candidates.sort((a,b)=>(b.textContent||'').trim().length-(a.textContent||'').trim().length)[0]||doc.body;
+  const title=(doc.querySelector('meta[property="og:title"]')?.content||doc.querySelector('h1')?.textContent||hintTitle||doc.title||domainOf(url)).replace(/\s+/g,' ').trim().slice(0,300);
+  const blocks=[],seenText=new Set();
+  for(const el of root.querySelectorAll('h1,h2,h3,p,blockquote,li,img')){
+    if(adLikeElement(el)||el.closest('nav,footer,header,aside'))continue;
+    if(el.tagName==='IMG'){
+      const raw=el.getAttribute('data-src')||el.getAttribute('src')||el.getAttribute('data-original')||el.getAttribute('data-lazy-src')||'';
+      const src=absoluteUrl(raw,url);if(!src)continue;
+      const w=Number(el.getAttribute('width')||0),h=Number(el.getAttribute('height')||0);if((w&&w<120)||(h&&h<80))continue;
+      blocks.push({kind:'image',src,alt:String(el.getAttribute('alt')||'').slice(0,180)});if(blocks.length>=220)break;continue;
+    }
+    const value=(el.textContent||'').replace(/\s+/g,' ').trim();if(value.length<2||adLikeText(value)||seenText.has(value))continue;
+    if(/cookie|プライバシーポリシー|利用規約|シェアする|フォローする/i.test(value)&&value.length<120)continue;
+    seenText.add(value);
+    blocks.push({kind:/^H[1-3]$/.test(el.tagName)?'heading':el.tagName==='BLOCKQUOTE'?'quote':'text',text:value.slice(0,3000)});
+    if(blocks.length>=220)break;
+  }
+  const textLength=blocks.filter(x=>x.text).reduce((n,x)=>n+x.text.length,0);
+  return {title,blocks,textLength};
+}
+function articleBlocksHTML(article){
+  return article.blocks.map(b=>{
+    if(b.kind==='image')return `<figure class="clean-reader-image"><img ${imageSourceAttrs(b.src)} alt="${esc(b.alt||'')}" loading="lazy" referrerpolicy="no-referrer"></figure>`;
+    if(b.kind==='heading')return `<h2>${esc(b.text)}</h2>`;
+    if(b.kind==='quote')return `<blockquote>${esc(b.text)}</blockquote>`;
+    return `<p>${esc(b.text)}</p>`;
+  }).join('');
+}
+function ensureArticleReaderDialog(){
+  let d=$('#articleReaderDialog');if(d)return d;
+  d=document.createElement('dialog');d.id='articleReaderDialog';d.className='fullscreen-dialog article-reader-dialog';
+  d.innerHTML='<div class="clean-reader-screen"><header class="clean-reader-header"><button type="button" class="round-btn" data-clean-reader-close>‹</button><div class="clean-reader-heading"><p class="eyebrow" data-clean-reader-domain></p><h2 data-clean-reader-title>記事</h2></div><button type="button" class="round-btn" data-clean-reader-external>↗</button></header><div class="clean-reader-body" data-clean-reader-body></div><div class="clean-reader-actions"><button type="button" class="secondary" data-clean-reader-save>♡ 保存</button><button type="button" class="primary" data-clean-reader-external>元ページ</button></div></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll('[data-clean-reader-close]').forEach(b=>b.onclick=()=>d.close());
+  d.querySelectorAll('[data-clean-reader-external]').forEach(b=>b.onclick=()=>{if(d._url)window.open(d._url,'_blank','noopener');});
+  d.querySelector('[data-clean-reader-save]').onclick=()=>{if(d._item)toggleSavedItem(d._item,d.querySelector('[data-clean-reader-save]'));};
+  return d;
+}
+async function openArticleReader(item){
+  if(!item?.url)return;
+  recordHistory(item,false);
+  const d=ensureArticleReaderDialog();d._url=item.url;d._item=item;
+  d.querySelector('[data-clean-reader-domain]').textContent=domainOf(item.url);
+  d.querySelector('[data-clean-reader-title]').textContent=item.title||'記事';
+  const body=d.querySelector('[data-clean-reader-body]');body.innerHTML='<div class="reader-loading">広告を除いて本文を読み込んでいます…</div>';
+  const save=d.querySelector('[data-clean-reader-save]');save.textContent=isSavedUrl(item.url)?'♥ 保存済み':'♡ 保存';
+  if(!d.open)d.showModal();
+  try{
+    const text=await fetchText(item.url),article=extractReadableArticle(text,item.url,item.title);
+    if(d._url!==item.url)return;
+    d.querySelector('[data-clean-reader-title]').textContent=article.title||item.title||'記事';
+    body.innerHTML=article.textLength>=80?articleBlocksHTML(article):'<div class="empty-card">本文を十分に抽出できませんでした。右上または「元ページ」からSafariで開けます。</div>';
+  }catch(e){
+    if(d._url!==item.url)return;
+    body.innerHTML=`<div class="empty-card"><strong>本文を取得できませんでした。</strong><br>${esc(e.message)}<br><br>元ページは右上または下のボタンから開けます。</div>`;
+  }
+}
+function ensureImageViewerDialog(){
+  let d=$('#imageViewerDialog');if(d)return d;
+  d=document.createElement('dialog');d.id='imageViewerDialog';d.className='fullscreen-dialog image-viewer-dialog';
+  d.innerHTML='<div class="image-viewer-screen"><header class="image-viewer-header"><button type="button" class="round-btn" data-image-close>‹</button><div class="image-viewer-title" data-image-title>画像</div><button type="button" class="round-btn" data-image-external>↗</button></header><div class="image-viewer-stage"><img data-image-main alt="" referrerpolicy="no-referrer"></div><div class="image-viewer-actions"><button type="button" class="secondary" data-image-prev>‹ 前</button><button type="button" class="secondary" data-image-save>⇩ 端末保存</button><button type="button" class="secondary" data-image-next>次 ›</button></div></div>';
+  document.body.appendChild(d);
+  d.querySelector('[data-image-close]').onclick=()=>d.close();
+  d.querySelector('[data-image-prev]').onclick=()=>renderImageViewerAt(d,Math.max(0,d._index-1));
+  d.querySelector('[data-image-next]').onclick=()=>renderImageViewerAt(d,Math.min(d._items.length-1,d._index+1));
+  d.querySelector('[data-image-save]').onclick=()=>prepareDeviceSave(d._items[d._index]);
+  d.querySelector('[data-image-external]').onclick=()=>{const x=d._items[d._index];if(x?.url)window.open(x.url,'_blank','noopener');};
+  return d;
+}
+function renderImageViewerAt(d,index){
+  d._index=index;const x=d._items[index];if(!x)return;
+  d.querySelector('[data-image-title]').textContent=x.title||'画像';
+  const img=d.querySelector('[data-image-main]');img.src=normalizeUrl(x.image||x.url)||'';img.alt=x.title||'';
+  d.querySelector('[data-image-prev]').disabled=index<=0;d.querySelector('[data-image-next]').disabled=index>=d._items.length-1;
+}
+function openImageViewer(item){
+  if(!item)return;
+  recordHistory(item,false);
+  const images=(activeItems||[]).filter(x=>mediaKind(x)==='image'&&x.image);const list=images.length?images:[item];
+  const d=ensureImageViewerDialog();d._items=list;let index=list.findIndex(x=>x.url===item.url);if(index<0)index=0;renderImageViewerAt(d,index);if(!d.open)d.showModal();
+}
 function openItem(item){
   if(!item)return;
   if(item.videoUrl){
@@ -1119,8 +1205,9 @@ function openItem(item){
     openVideoFeedItems([item],item.channelName||'動画');
     return;
   }
+  if(mediaKind(item)==='image'&&item.image){openImageViewer(item);return;}
   if(!item.url)return;
-  recordHistory(item); window.open(item.url,'_blank','noopener');
+  openArticleReader(item);
 }
 
 function mediaFileExtension(url,mime=''){
