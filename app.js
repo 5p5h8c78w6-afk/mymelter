@@ -742,10 +742,10 @@ function consumeBrowserImportHash(){
     if(payload?.m==='web-search'){
       const pending=state.meta.pendingWebSimilar||{},channel=state.channels.find(x=>x.id===pending.channelId)||null,excludeDomain=domainOf(channel?.url||'');
       const list=uniqueBy((Array.isArray(payload?.e)?payload.e:[]).map(x=>{
-        const url=normalizeUrl(x?.u||''),name=String(x?.n||domainOf(url)||'Web候補').trim().slice(0,120),image=normalizeUrl(x?.i||''),similarityScore=Math.max(4,Number(x?.sc||8));if(!url||!name)return null;
+        const rawUrl=normalizeUrl(x?.u||''),url=normalizeSimilarSiteUrl(rawUrl),name=String(x?.n||domainOf(rawUrl)||'Web候補').trim().slice(0,120),image=normalizeUrl(x?.i||''),similarityScore=Math.max(4,Number(x?.sc||8));if(!url||!name)return null;
         if(excludeDomain&&domainOf(url)===excludeDomain)return null;
         if(state.channels.some(y=>domainOf(y.url)===domainOf(url)))return null;
-        const type=guessTypeFromText(name,url),candidate={...candidateFrom(url,name,type,{source:'web-search',image,similarityScore}),genre:inferGenre({name,url,type}),similarityScore};
+        const candidate={...candidateFrom(url,name,'mixed',{source:'web-search',image,similarityScore}),genre:'その他',similarityScore,hintType:guessTypeFromText(name,rawUrl)};
         return isSuitableSimilarCandidate(candidate,null)?candidate:null;
       }).filter(Boolean),x=>domainOf(x.url)).slice(0,20);
       state.candidates=list;state.meta.pendingWebSimilar=null;state.meta.lastDiscoveryUrl=channel?.url||'';state.meta.lastDiscoveryAt=Date.now();saveState(false);
@@ -753,9 +753,10 @@ function consumeBrowserImportHash(){
       return {kind:'web-search',channel,candidates:list,query:String(payload?.q||pending.query||'')};
     }
     const mapImported=(arr,deep=false)=>(Array.isArray(arr)?arr:[]).map(x=>{
-      const url=normalizeUrl(x?.u||''); const image=normalizeUrl(x?.i||''); const videoUrl=normalizeUrl(x?.m||'');
+      const url=normalizeUrl(x?.u||''); const image=normalizeUrl(x?.i||''); const videoUrl=normalizeUrl(x?.m||''); const explicit=String(x?.y||'');
       if(!url&&!videoUrl)return null;
-      return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type:videoUrl?'video':image?'image':'article',browserRank:String(x?.r||''),deepSource:String(x?.z||''),deepDive:!!deep};
+      const type=explicit|| (videoUrl?'video':image?'image':'article');
+      return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type,excerpt:String(x?.e||'').trim().slice(0,800),browserRank:String(x?.r||''),deepSource:String(x?.z||''),deepDive:!!deep};
     }).filter(Boolean);
     const primaryRaw=mapImported(payload?.i,false);
     const items=uniqueBy(primaryRaw,x=>x.browserRank?('rank:'+x.browserRank):(x.id||x.videoUrl||x.url)).slice(0,30);
@@ -763,9 +764,9 @@ function consumeBrowserImportHash(){
     const deepItems=uniqueBy(mapImported(payload?.d,true),x=>x.videoUrl||x.url).filter(x=>!primaryKeys.has(x.videoUrl||x.url)).slice(0,60);
     const sourceOrigin=new URL(source).origin,registeredDomains=new Set(state.channels.map(x=>domainOf(x.url)).filter(Boolean));
     const relatedSites=uniqueBy((Array.isArray(payload?.e)?payload.e:[]).map(x=>{
-      const url=normalizeUrl(x?.u||''),name=String(x?.n||domainOf(url)||'関連サイト').trim().slice(0,120),image=normalizeUrl(x?.i||''),similarityScore=Number(x?.sc||0);if(!url||!name)return null;
+      const rawUrl=normalizeUrl(x?.u||''),url=normalizeSimilarSiteUrl(rawUrl),name=String(x?.n||domainOf(rawUrl)||'関連サイト').trim().slice(0,120),image=normalizeUrl(x?.i||''),similarityScore=Number(x?.sc||0);if(!url||!name)return null;
       if(new URL(url).origin===sourceOrigin||registeredDomains.has(domainOf(url)))return null;
-      const type=guessTypeFromText(name,url),candidate={name,url,image,similarityScore,type,genre:inferGenre({name,url,type}),source:'safari-related'};
+      const type='mixed',candidate={name,url,image,similarityScore,type,genre:inferGenre({name,url,type:guessTypeFromText(name,rawUrl)}),source:'safari-related',hintType:guessTypeFromText(name,rawUrl)};
       return isSuitableSimilarCandidate(candidate,null)?candidate:null;
     }).filter(Boolean),x=>domainOf(x.url)).slice(0,30);
     if(!items.length&&!deepItems.length) throw new Error('取り込める項目がありません');
@@ -1984,15 +1985,15 @@ function externalSiteCandidates(doc,base,channel){
   const seenDomains=new Set(state.channels.map(c=>domainOf(c.url)).filter(Boolean)),origin=new URL(base).origin;
   const genre=inferGenre(channel),list=[];
   for(const a of doc.querySelectorAll('a[href]')){
-    const url=MyMelterFeatures.safeUrl(a.getAttribute('href'),base),name=(a.textContent||a.getAttribute('title')||'').replace(/\s+/g,' ').trim();
+    const rawUrl=MyMelterFeatures.safeUrl(a.getAttribute('href'),base),url=normalizeSimilarSiteUrl(rawUrl),name=(a.textContent||a.getAttribute('title')||'').replace(/\s+/g,' ').trim();
     if(!url||new URL(url).origin===origin||seenDomains.has(domainOf(url))||!name||name.length>100)continue;
     if(/\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|\?)/i.test(url))continue;
     const context=(a.closest('aside,nav,footer,section,div,li')?.textContent||'').slice(0,500),rel=String(a.getAttribute('rel')||''),signals=similarCandidateSignals(name,url,context,rel);
     if(signals.generic||signals.ad||signals.adHost)continue;
-    const type=guessTypeFromText(name+' '+context,url),inferred=inferGenre({name,url,type}),sameGenre=inferred===genre;
+    const hinted=guessTypeFromText(name+' '+context,rawUrl),type='mixed',inferred=inferGenre({name,url,type:hinted}),sameGenre=inferred===genre;
     const relatedBox=!!a.closest('[class*="related"],[class*="recommend"],[class*="partner"],[class*="linklist"],[class*="links"]');
     const score=(signals.relation?5:0)+(relatedBox?2:0)+(sameGenre?2:0)+(name.length>=4?1:0);
-    const candidate={...candidateFrom(url,name,type,{source:'external-link',image:relatedLinkImage(a,base),similarityScore:score}),genre:inferred,similarityScore:score};
+    const candidate={...candidateFrom(url,name,type,{source:'external-link',image:relatedLinkImage(a,base),similarityScore:score}),genre:inferred,similarityScore:score,hintType:hinted};
     if(!isSuitableSimilarCandidate(candidate,channel,context,rel))continue;
     list.push(candidate);
   }
@@ -2001,7 +2002,7 @@ function externalSiteCandidates(doc,base,channel){
 function webSimilarSearchQuery(channel){
   const d=domainOf(channel?.url||''),genre=inferGenre(channel||{}),name=String(channel?.name||'').replace(/\s+/g,' ').trim();
   const core=(name&&name.length<=60)?name:(d||'サイト');
-  return [core,genre,'似たサイト おすすめ',d?('-site:'+d):''].filter(Boolean).join(' ');
+  return [core,genre,'似たサイト おすすめ',d?('-site:'+d):'', '-site:x.com -site:twitter.com -site:search.yahoo.co.jp -site:yandex.com -site:note.com'].filter(Boolean).join(' ');
 }
 function renderWebSimilarFallback(channel,message=''){
   const text=message||'元ページ内に十分な関連リンクがありません。Web検索から候補を探せます。';
