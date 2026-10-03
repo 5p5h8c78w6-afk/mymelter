@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -512,7 +512,18 @@ var A=function(u,b){try{return new URL(u,b||location.href).href}catch(e){return'
 var X=function(e){return((e&&(e.innerText||e.textContent))||'').replace(new RegExp('\\\\s+','g'),' ').trim()};
 var G=function(img,base){if(!img)return'';var raw=img.getAttribute('data-src')||img.getAttribute('src')||img.getAttribute('data-original')||img.getAttribute('data-lazy-src')||img.currentSrc||'';if(!raw){var ss=img.getAttribute('srcset')||img.getAttribute('data-srcset')||'';raw=(ss.split(',')[0]||'').trim().split(' ')[0]||''}return A(raw,base)};
 var MID=function(u){var m=String(u||'').match(new RegExp('(?:^|/)([0-9]{12,})(?:/|$)'));return m?m[1]:''};
-var S={},I=[];
+var S={},I=[],ES={},E=[];
+var collectRelated=function(doc,base){
+  var origin='';try{origin=new URL(base).origin}catch(e){return}
+  [].slice.call(doc.querySelectorAll('a[href]')).forEach(function(a){
+    var u=A(a.getAttribute('href'),base),n=X(a).slice(0,100),p;try{p=new URL(u)}catch(e){return}
+    if(!u||!n||!/^https?:$/.test(p.protocol)||p.origin===origin||p.username||p.password||ES[p.hostname])return;
+    if(/(^|\.)((x|twitter)\.com|t\.co|video\.twimg\.com|pbs\.twimg\.com)$/i.test(p.hostname))return;
+    var sig=(n+' '+u+' '+X(a.parentElement).slice(0,240)).toLowerCase();
+    if(/\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|[?#])/i.test(u)||/ログイン|privacy|利用規約|広告|login|sign.?up|share|facebook\.com\/sharer|twitter\.com\/intent|x\.com\/intent/i.test(sig))return;
+    ES[p.hostname]=1;E.push({n:n,u:p.href});
+  })
+};
 var D=function(t,u,p,m,r,k){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var key=k||m||u;if(!u||u.indexOf('http')!==0||!key||S[key])return;S[key]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
 var collect=function(txt,pat){var out=[],re=new RegExp(pat,'g'),m;while((m=re.exec(String(txt||'')))!==null){out.push(m[0]);if(!m[0])re.lastIndex++}return out};
 var texts=function(doc){var body=X(doc.body),r=[],sv=[],m,re1=new RegExp('第\\\\s*(\\\\d+)\\\\s*位','g'),re2=new RegExp('(\\\\d+)\\\\s*回保存','g');while((m=re1.exec(body))!==null)r.push(m[1]);while((m=re2.exec(body))!==null)sv.push(m[1]);return{r:r,s:sv}};
@@ -580,6 +591,7 @@ var loadDoc=async function(url){
 };
 var parsePage=function(doc,url){
   if(!doc)return;
+  collectRelated(doc,url);
   var before=I.length;parseAll(doc,url);
   var label=(doc.title||'').replace(new RegExp('\\s+','g'),' ').trim();
   for(var z=before;z<I.length;z++)I[z].z=label;
@@ -603,7 +615,7 @@ while(creatorQueue.length&&creators<3&&I.length<80){
 var primary=I.slice(0,primaryEnd),deep=I.slice(primaryEnd);
 I=I.slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
 if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:12,s:location.href,n:document.title,i:primary,d:deep};
+var P={v:13,s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30)};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -615,7 +627,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='操作レイヤー・プレビュー v12。メディアIDサムネイル対応を維持し、動画操作ボタンとシークプレビューを改善しました。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='Safari取り込み v13。動画一覧・深掘りに加えて「似たサイト」候補も取り込みます。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -661,21 +673,27 @@ function consumeBrowserImportHash(){
     const items=uniqueBy(primaryRaw,x=>x.browserRank?('rank:'+x.browserRank):(x.id||x.videoUrl||x.url)).slice(0,30);
     const primaryKeys=new Set(items.map(x=>x.videoUrl||x.url).filter(Boolean));
     const deepItems=uniqueBy(mapImported(payload?.d,true),x=>x.videoUrl||x.url).filter(x=>!primaryKeys.has(x.videoUrl||x.url)).slice(0,60);
+    const sourceOrigin=new URL(source).origin,registeredDomains=new Set(state.channels.map(x=>domainOf(x.url)).filter(Boolean));
+    const relatedSites=uniqueBy((Array.isArray(payload?.e)?payload.e:[]).map(x=>{
+      const url=normalizeUrl(x?.u||''),name=String(x?.n||domainOf(url)||'関連サイト').trim().slice(0,120);if(!url||!name)return null;
+      if(new URL(url).origin===sourceOrigin||registeredDomains.has(domainOf(url)))return null;
+      const type=guessTypeFromText(name,url);return {name,url,type,genre:inferGenre({name,url,type}),source:'safari-related'};
+    }).filter(Boolean),x=>domainOf(x.url)).slice(0,30);
     if(!items.length&&!deepItems.length) throw new Error('取り込める項目がありません');
     let channel=state.channels.find(c=>c.source==='browser'&&canonicalBrowserSourceUrl(c.browserSourceUrl||c.url)===source);
     if(channel){
       const primary=items.length?items:(channel.snapshotItems||[]);
       const deep=deepItems.length?deepItems:(channel.deepDiveItems||[]);
-      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.snapshotItems=primary; channel.deepDiveItems=deep; channel.itemCount=primary.length; channel.updatedAt=Date.now();
+      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.snapshotItems=primary; channel.deepDiveItems=deep; channel.relatedSites=relatedSites.length?relatedSites:(Array.isArray(channel.relatedSites)?channel.relatedSites:[]); channel.itemCount=primary.length; channel.updatedAt=Date.now();
       [...primary,...deep].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       rememberItems([...primary,...deep]);
     }else{
-      channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,snapshotItems:items,deepDiveItems:deepItems,itemCount:items.length});
+      channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,snapshotItems:items,deepDiveItems:deepItems,relatedSites,itemCount:items.length});
       [...items,...deepItems].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件'+(Number(payload?.v||0)<12?'（取込コードv12へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<13?'（取込コードv13へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -1756,6 +1774,21 @@ function externalSiteCandidates(doc,base,channel){
 async function runSimilarDiscovery(channel){
   const status=$('#discoverStatus');$('#discoverUrl').value=channel.url;$('#discoverResults').innerHTML='';status.textContent='関連リンクから似たサイト候補を探しています…';
   if(!$('#discoverDialog').open)$('#discoverDialog').showModal();$('#runDiscoveryBtn').disabled=true;
+  if(channel.source==='browser'){
+    const list=uniqueBy((Array.isArray(channel.relatedSites)?channel.relatedSites:[]).map(x=>{
+      const url=normalizeUrl(x?.url||''),name=String(x?.name||domainOf(url)||'関連サイト').trim();if(!url||!name)return null;
+      if(state.channels.some(c=>domainOf(c.url)===domainOf(url)))return null;
+      const type=x.type||guessTypeFromText(name,url);return {...candidateFrom(url,name,type,{source:'safari-related'}),genre:x.genre||inferGenre({name,url,type})};
+    }).filter(Boolean),c=>domainOf(c.url)).slice(0,12);
+    state.candidates=list;state.meta.lastDiscoveryUrl=channel.url;state.meta.lastDiscoveryAt=Date.now();saveState(false);renderCandidates();
+    if(list.length){
+      renderDiscoveryResults(list);status.textContent=`${list.length}件の候補（Safari取り込み時に保存済み）。Workerへ再アクセスせず表示しています。`;
+    }else{
+      status.textContent='このSafari取り込みデータには似たサイト候補がありません。v13で1回だけ再取り込みしてください。';
+      $('#discoverResults').innerHTML=`<div class="browser-fallback-card"><strong>Safariから似たサイト候補を更新できます</strong><small>Workerで再取得せず、Safariで表示できる実ページから外部サイト候補を一緒に取り込みます。</small><button type="button" class="primary" data-browser-import-target="${esc(channel.browserSourceUrl||channel.url)}">Safariで候補を再取り込み</button></div>`;
+    }
+    $('#runDiscoveryBtn').disabled=false;return;
+  }
   try{const list=(await discoverChannels(channel.url,channel)).filter(c=>!state.channels.some(x=>normalizeUrl(x.url)===normalizeUrl(c.url)));
     state.candidates=list;state.meta.lastDiscoveryUrl=channel.url;state.meta.lastDiscoveryAt=Date.now();saveState(false);renderCandidates();renderDiscoveryResults(list);
     status.textContent=list.length?`${list.length}件の候補（外部リンクを含む）。内容を確認してから追加してください。`:'関連候補がありません。検索エンジンによる全Web検索は行いません。';
