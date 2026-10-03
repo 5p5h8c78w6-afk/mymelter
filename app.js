@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -77,8 +77,10 @@ function typeLabel(type){ return ({video:'動画',image:'画像',article:'記事
 function typeGlyph(type){ return ({video:'▶',image:'▧',article:'≡',feed:'◎',mixed:'◇'})[type] || '◇'; }
 function colorForType(type){ return ({video:'red',image:'green',article:'purple',feed:'blue',mixed:'gold'})[type] || 'blue'; }
 function mediaKind(item){
-  if(item?.videoUrl)return 'video';
   if(item?.type==='article'||item?.type==='feed')return 'article';
+  if(item?.type==='image')return 'image';
+  if(item?.type==='video')return 'video';
+  if(item?.videoUrl)return 'video';
   if(item?.image)return 'image';
   return item?.type&&item.type!=='mixed'?item.type:'article';
 }
@@ -517,9 +519,11 @@ function parseHtml(text,channel,baseUrl){
     let videoUrl=selectorValue(node,channel.selectors?.video,'video')||attrFrom(node,['video[src]','video source[src]','source[src]','a[href$=".mp4"]','a[href*=".m3u8"]'],['src','href']);
     link=absoluteUrl(link,baseUrl); image=absoluteUrl(image,baseUrl); videoUrl=absoluteUrl(videoUrl,baseUrl);
     if(!videoUrl&&isMediaUrl(link)) videoUrl=link; if(!image&&isImageUrl(link)) image=link;
-    const articleish=!!node.matches?.('article,.post,.entry,[class*="article"],[class*="post"]')||!!node.querySelector?.('p,h1,h2,h3');
-    let type=videoUrl?'video':articleish?'article':image?'image':'article';
-    if(channel.type==='article'&&!videoUrl)type='article';
+    const articleish=!!node.matches?.('article,.post,.entry,[class*="article"],[class*="post"],[class*="news"]')||!!node.querySelector?.('p,h1,h2,h3');
+    const videoish=!!node.matches?.('video,[class*="video"],[class*="movie"]')||/\b(video|movie|動画)\b/i.test((node.className||'')+' '+title);
+    if(articleish&&!videoish&&channel.type!=='video') videoUrl='';
+    let type=articleish&&!videoish?'article':videoUrl?'video':image?'image':'article';
+    if(channel.type==='article'&&type!=='video')type='article';
     if(channel.type==='image'&&!videoUrl&&image&&!articleish)type='image';
     const excerpt=nodeText(node,['p','.excerpt','.summary','.description']).replace(/\s+/g,' ').trim().slice(0,500);
     const timeEl=node.querySelector?.('time[datetime], [data-date], [data-published]'); const publishedRaw=timeEl?.getAttribute?.('datetime')||timeEl?.getAttribute?.('data-date')||timeEl?.getAttribute?.('data-published')||''; const publishedAt=Date.parse(publishedRaw)||0;
@@ -932,7 +936,7 @@ async function openChannel(channel,keyword=''){
   }catch(e){ $('#readerStatus').textContent=`取得できませんでした：${e.message}`; $('#readerContent').innerHTML=`<div class="empty-card"><strong>取得エラー</strong><br>${esc(e.message)}<br><br><button class="primary" data-open-url="${esc(url)}">サイトを直接開く</button></div>`; }
 }
 function activeVideoItems(){
-  const primary=(activeItems||[]).filter(x=>x?.videoUrl);
+  const primary=(activeItems||[]).filter(x=>mediaKind(x)==='video'&&x?.videoUrl);
   const seen=new Set(primary.map(x=>x.videoUrl||x.url).filter(Boolean));
   const deep=activeChannel&&Array.isArray(activeChannel.deepDiveItems)?activeChannel.deepDiveItems.filter(x=>{
     if(!x?.videoUrl)return false;
@@ -1232,14 +1236,18 @@ function openImageViewer(item){
 }
 function openItem(item){
   if(!item)return;
-  if(item.videoUrl){
+  const kind=mediaKind(item);
+  if(kind==='article'){
+    if(item.url)openArticleReader(item);
+    return;
+  }
+  if(kind==='image'&&item.image){openImageViewer(item);return;}
+  if(kind==='video'&&item.videoUrl){
     recordHistory(item,false);
     openVideoFeedItems([item],item.channelName||'動画');
     return;
   }
-  if(mediaKind(item)==='image'&&item.image){openImageViewer(item);return;}
-  if(!item.url)return;
-  openArticleReader(item);
+  if(item.url)openArticleReader(item);
 }
 
 function mediaFileExtension(url,mime=''){
