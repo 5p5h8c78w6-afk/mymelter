@@ -1,4 +1,4 @@
-const APP_VERSION = '1.6.4';
+const APP_VERSION = '1.6.5';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -1664,6 +1664,28 @@ function feedShouldAutoPlay(v){
   const slide=v?.closest?.('.video-slide'),scrub=slide?.querySelector('[data-feed-scrub]');
   return !!(v&&!isNativeLongVideo(v)&&v.dataset.feedState==='active'&&v.dataset.shouldPlay==='1'&&slide?.classList.contains('is-current')&&scrub?.dataset.dragging!=='1'&&!document.hidden);
 }
+function feedUnavailableMessage(v,kind='missing'){
+  const code=Number(v?.error?.code||0);
+  if(code===4)return '元データがありません（削除・期限切れの可能性があります）';
+  if(kind==='timeout')return '元データを読み込めません（削除・期限切れの可能性があります）';
+  return '元データがありません（削除・期限切れの可能性があります）';
+}
+function markFeedUnavailable(slide,v,message=''){
+  if(!slide)return;
+  if(v){
+    v.dataset.shouldPlay='0';
+    v.dataset.feedState='unavailable';
+    try{v.pause();}catch{}
+    stopBufferPulse(v);clearTimeout(v._routeTimer);
+  }
+  setLoadStatus(slide,'');
+  slide.classList.remove('video-buffering','video-needs-tap','is-playing');
+  slide.classList.add('video-load-error','video-source-missing');
+  const label=slide.querySelector('[data-feed-error-text]');
+  if(label)label.textContent=message||feedUnavailableMessage(v);
+  showFeedControls(false);
+}
+
 async function kickFeedPlayback(v,slide,reason='再生を再開中…'){
   if(!v||!slide||!feedShouldAutoPlay(v))return false;
   setLoadStatus(slide,bufferStatusText(v,reason));showFeedControls(false);
@@ -1727,8 +1749,27 @@ function startFeedPlaybackWatchdog(){
     if(!v._watchLastAdvanceAt)v._watchLastAdvanceAt=now;
     const stuckFor=now-v._watchLastAdvanceAt;
     const ahead=bufferedEnd(v)-t;
+    const sourceAge=now-Number(v._sourceStartedAt||v._watchLastAdvanceAt||now);
     if(v.seeking)return;
-    if(v.readyState<2||ahead<=.15)return;
+    if(v.networkState===HTMLMediaElement.NETWORK_NO_SOURCE){
+      markFeedUnavailable(slide,v,feedUnavailableMessage(v));
+      return;
+    }
+    if(v.readyState<2||ahead<=.15){
+      if(sourceAge<10000)return;
+      const direct=v.dataset.directSrc||'',proxy=v.dataset.proxySrc||'',route=v.dataset.currentRoute||'direct';
+      if(route==='direct'&&proxy&&!v.dataset.noDataProxyTried){
+        v.dataset.noDataProxyTried='1';
+        setLoadStatus(slide,'元データを確認中…別経路を試しています');
+        loadFeedSource(v,proxy,'proxy','active');
+        v.dataset.shouldPlay='1';
+        return;
+      }
+      if(sourceAge>=16000){
+        markFeedUnavailable(slide,v,feedUnavailableMessage(v,'timeout'));
+      }
+      return;
+    }
     if(stuckFor<1400)return;
 
     const stage=Number(v._watchRecoverStage||0);
@@ -1772,7 +1813,7 @@ function startFeedPlaybackWatchdog(){
       }
     }
     if(stage>=4){
-      stopBufferPulse(v);setLoadStatus(slide,'');slide.classList.remove('video-buffering');slide.classList.add('video-load-error');showFeedControls(false);
+      markFeedUnavailable(slide,v,feedUnavailableMessage(v,'timeout'));
     }
   },500);
 }
@@ -1806,7 +1847,7 @@ function releaseFeedVideoElement(v,final=false){
   v.removeAttribute('src');
   v.preload='none';
   try{v.load();}catch{}
-  if(final){delete v.dataset.proxyTried;delete v.dataset.expectedSrc;delete v.dataset.currentRoute;delete v.dataset.nativeLong;v.controls=false;}
+  if(final){delete v.dataset.proxyTried;delete v.dataset.noDataProxyTried;delete v.dataset.expectedSrc;delete v.dataset.currentRoute;delete v.dataset.nativeLong;v.controls=false;}
 }
 function releaseFeedVideo(i){
   const slide=feedSlide(i),v=slide?.querySelector('video');
@@ -1820,6 +1861,7 @@ function loadFeedSource(v,src,route,stateName='active'){
   v.dataset.feedState=stateName;
   v.dataset.currentRoute=route;
   v.dataset.expectedSrc=src;
+  v._sourceStartedAt=Date.now();
   if(v._watchRecoverStage==null||Number(v._watchRecoverStage)===0)resetFeedProgressWatch(v,true);
   else resetFeedProgressWatch(v,false);
   v.preload=stateName==='active'?'auto':'metadata';
@@ -1929,7 +1971,7 @@ function videoSlideHTML(x,i){
   const media=direct?'<video data-direct-src="'+esc(direct)+'"'+proxyAttr+(poster?' poster="'+esc(poster)+'"':'')+' data-feed-video="'+i+'" playsinline loop preload="none"></video>':'<div class="video-fallback"><div><strong>直接再生URLがありません</strong></div></div>';
   const source=x.deepDive?('深掘り · '+(x.deepSource||'関連')):(x.channelName||domainOf(x.url));
   const longCard='<div class="long-system-card">'+(poster?'<img '+imageSourceAttrs(poster)+' alt="">':'<div class="long-system-placeholder">長尺動画</div>')+'<div class="long-system-copy"><strong>長尺動画</strong><small>iPhoneのSafari標準プレイヤーで再生します</small><button type="button" data-long-system-play="'+i+'">Safariで再生</button></div></div>';
-  return '<section class="video-slide" data-feed-index="'+i+'">'+media+longCard+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong>この動画を再生できません</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-load-status" data-feed-load-status hidden></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><video class="seek-preview-video" muted playsinline preload="metadata"></video><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><div class="video-scrubber" data-feed-scrub="'+i+'" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="video-scrub-track"><div class="video-scrub-buffer"></div><div class="video-scrub-fill"></div><div class="video-scrub-thumb"></div></div></div><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-quality="'+i+'"><span class="circle">HD</span><span>画質</span></button><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>端末保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
+  return '<section class="video-slide" data-feed-index="'+i+'">'+media+longCard+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong data-feed-error-text>元データがありません（削除・期限切れの可能性があります）</strong><button type="button" data-feed-retry="'+i+'">再試行</button></div><div class="video-load-status" data-feed-load-status hidden></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><video class="seek-preview-video" muted playsinline preload="metadata"></video><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><div class="video-scrubber" data-feed-scrub="'+i+'" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="video-scrub-track"><div class="video-scrub-buffer"></div><div class="video-scrub-fill"></div><div class="video-scrub-thumb"></div></div></div><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-quality="'+i+'"><span class="circle">HD</span><span>画質</span></button><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>端末保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
 }
 function setupVideoAutoplay(startIndex=0){
   const feed=$('#videoFeed'),vids=activeFeedItems,slides=$$('.video-slide',feed);
@@ -1946,7 +1988,8 @@ function setupVideoAutoplay(startIndex=0){
     v.addEventListener('canplay',()=>{
       if(v.dataset.feedState==='released')return;
       stopBufferPulse(v);setLoadStatus(slide,'');updateBufferedVisual(slide,v);
-      slide.classList.remove('video-buffering','video-load-error');
+      slide.classList.remove('video-buffering','video-load-error','video-source-missing');
+      delete v.dataset.noDataProxyTried;
       const route=v.dataset.currentRoute||'direct',direct=v.dataset.directSrc||'';
       if(direct)feedRoutePrefs.set(direct,route);
       if(isNativeLongVideo(v))showFeedControls(false);
@@ -1973,7 +2016,7 @@ function setupVideoAutoplay(startIndex=0){
         if(slide.classList.contains('is-current'))v.play().catch(()=>{});
         return;
       }
-      stopBufferPulse(v);setLoadStatus(slide,'');showFeedControls(false);slide.classList.remove('video-buffering');slide.classList.add('video-load-error');
+      markFeedUnavailable(slide,v,feedUnavailableMessage(v));
     });
     v.addEventListener('ended',()=>{try{v.currentTime=0;}catch{};});
   });
