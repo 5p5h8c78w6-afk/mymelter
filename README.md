@@ -1,4 +1,4 @@
-# MyMelter PWA 1.5.1
+# MyMelter PWA 1.5.2
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -7,6 +7,14 @@
 - GitHub Pages: 無料で利用可能（公開リポジトリ）
 - iPhone: Safari → 共有 →「ホーム画面に追加」でアプリ風に起動
 - データ: 原則この端末の `localStorage` に保存
+
+## 1.5.2 の修正
+
+- 1.5.1のReader修正を新しいService Workerキャッシュへ切り替え、iPhone Safariが古いJSを保持し続けるケースを防ぎます。
+- `tabs.find is not a function` を解消し、記事/画像/動画の自動モード判定を正常化します。
+- 記事型は偶発的な動画URLより優先し、「開く」はClean Readerへ進みます。画像型は画像ビューア、明示的な動画型だけ動画フィードへ進みます。
+- 記事サイトの広告由来動画を動画タブへ混ぜないようにします。
+- Safari取り込みv16、Worker 1.3、Web類似検索、広告除外、HLS保存は変更していません。
 
 ## 1.5.1 の修正
 
@@ -243,4 +251,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.5.1`
+`MyMelter PWA 1.5.2`
