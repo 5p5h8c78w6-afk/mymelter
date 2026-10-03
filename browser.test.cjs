@@ -15,6 +15,26 @@ const safariLegacy=await page.evaluate(async()=>{let calls=0;const old=fetchText
 const webFallback=await page.evaluate(async()=>{const ch=normalizeChannel({id:'web-fallback',name:'動画サイト',url:'https://fallback.example/',type:'video',source:'browser',browserSourceUrl:'https://fallback.example/',relatedSitesVersion:14,relatedSites:[]});state.channels.push(ch);await runSimilarDiscovery(ch);const button=!!document.querySelector('[data-web-similar-channel="web-fallback"]');const out={button,status:document.querySelector('#discoverStatus').textContent};state.channels=state.channels.filter(x=>x.id!==ch.id);if(document.querySelector('#discoverDialog').open)document.querySelector('#discoverDialog').close();return out;});assert.equal(webFallback.button,true);assert.match(webFallback.status,/ページ内/);
 const webLaunch=await page.evaluate(()=>{const ch=state.channels.find(x=>x.id==='a');let opened='';const oldOpen=window.open;window.open=(u)=>{opened=u;return {};};state.meta.browserImportVersion=16;startWebSimilarSearch(ch);const pending=state.meta.pendingWebSimilar;window.open=oldOpen;return {opened,pending,query:webSimilarSearchQuery(ch)};});assert.match(webLaunch.opened,/html\.duckduckgo\.com\/html\/\?q=/);assert.equal(webLaunch.pending.channelId,'a');assert.match(webLaunch.query,/-site:video\.example/);
 const webImport=await page.evaluate(()=>{state.meta.pendingWebSimilar={channelId:'a',query:'動画サイト 動画 似たサイト おすすめ',at:Date.now()};const before=state.channels.length;const payload={v:16,m:'web-search',s:'https://html.duckduckgo.com/html/?q=test',n:'Search',q:'test',i:[],d:[],e:[{n:'関連動画サイト',u:'https://candidate.example/posts/123',i:'https://candidate.example/icon.png',sc:8},{n:'X投稿',u:'https://x.com/user/status/123',sc:8},{n:'Yandex',u:'https://yandex.com/search/?text=test',sc:8},{n:'【PR】広告',u:'https://ads.example/',sc:8},{n:'同一サイト',u:'https://video.example/other',sc:8}]};const bytes=new TextEncoder().encode(JSON.stringify(payload));let bin='';for(const b of bytes)bin+=String.fromCharCode(b);location.hash='#mmimport='+encodeURIComponent(btoa(bin));const result=consumeBrowserImportHash();return {kind:result?.kind,channelCount:state.channels.length-before,urls:state.candidates.map(x=>x.url),types:state.candidates.map(x=>x.type),images:state.candidates.map(x=>x.image),pending:state.meta.pendingWebSimilar,importVersion:state.meta.browserImportVersion};});assert.equal(webImport.kind,'web-search');assert.equal(webImport.channelCount,0);assert.deepEqual(webImport.urls,['https://candidate.example/']);assert.deepEqual(webImport.types,['mixed']);assert.deepEqual(webImport.images,['https://candidate.example/icon.png']);assert.equal(webImport.pending,null);assert.equal(webImport.importVersion,16);
+const profileRegression=await page.evaluate(()=>{
+  const ch=normalizeChannel({id:'news-profile',name:'ニュース',url:'https://news.example/',type:'mixed'});
+  const items=[
+    {title:'記事A',url:'https://news.example/a',image:'https://news.example/a.jpg',videoUrl:'https://ads.example/ad.mp4',type:'article'},
+    {title:'記事B',url:'https://news.example/b',image:'https://news.example/b.jpg',type:'article'}
+  ];
+  activeChannel=ch;activeItems=items;
+  const p=applyReaderProfile(ch,items);
+  return {mode:p.mode,activeReaderMode,tabs:[...document.querySelectorAll('#readerModeTabs button')].map(b=>({mode:b.dataset.readerMode,text:b.textContent,active:b.classList.contains('active')})),kinds:items.map(mediaKind)};
+});assert.equal(profileRegression.mode,'article');assert.equal(profileRegression.activeReaderMode,'list');assert.deepEqual(profileRegression.kinds,['article','article']);assert.equal(profileRegression.tabs.find(x=>x.mode==='list').text,'記事');
+const openPriority=await page.evaluate(()=>{
+  let article=0,video=0,image=0;
+  const oldA=openArticleReader,oldV=openVideoFeedItems,oldI=openImageViewer;
+  openArticleReader=()=>{article++};openVideoFeedItems=()=>{video++};openImageViewer=()=>{image++};
+  openItem({title:'記事',url:'https://news.example/a',videoUrl:'https://ads.example/ad.mp4',type:'article'});
+  openItem({title:'画像',url:'https://img.example/1',image:'https://img.example/1.jpg',type:'image'});
+  openItem({title:'動画',url:'https://video.example/1',videoUrl:'https://video.example/1.mp4',type:'video'});
+  openArticleReader=oldA;openVideoFeedItems=oldV;openImageViewer=oldI;
+  return {article,video,image};
+});assert.deepEqual(openPriority,{article:1,video:1,image:1});
 const unified=await page.evaluate(()=>{
   const ch=normalizeChannel({id:'articles',name:'記事サイト',url:'https://news.example/',type:'mixed'});
   const items=parseHtml('<main><article><h2><a href="/a">記事A</a></h2><img src="/a.jpg"><p>本文の概要です</p></article><div class="advertisement"><a href="/ad">広告リンク</a></div><article><h2><a href="/b">記事B</a></h2><p>別の記事本文</p></article></main>',ch,'https://news.example/');
@@ -35,5 +55,5 @@ await page.route('https://fixture.example/**',route=>route.fulfill({status:200,c
 await page.evaluate(()=>{fetchText=async()=> '#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:3,\npart.ts\n#EXT-X-ENDLIST';return openQualityPicker({title:'fixture',videoUrl:'https://fixture.example/video.m3u8'},null,true);});
 const downloadEvent=page.waitForEvent('download');await page.locator('[data-quality-start]').click();const download=await downloadEvent;assert.equal(download.suggestedFilename(),'fixture.zip');const zip=fs.readFileSync(await download.path());assert.equal(zip.readUInt32LE(0),0x04034b50);assert.ok(zip.includes(Buffer.from('playlist.m3u8')));assert.ok(zip.includes(Buffer.from('media-00000.ts')));assert.ok(zip.includes(Buffer.from([0x47,0x01,0x02])));
 await page.evaluate(()=>{navigate('channels');state.ui.channelGenre='all';renderChannelManager();});await page.screenshot({path:__dirname+'/../channels-mobile.png',fullPage:true});
-assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.5.0 unified article/image/video viewing, Safari v16 import, normalized similar sites, clean Reader, image viewer, Web fallback, scrolling, HLS/Worker safety; no page errors');
+assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.5.1 article/image priority, unified article/image/video viewing, Safari v16 import, normalized similar sites, clean Reader, image viewer, Web fallback, scrolling, HLS/Worker safety; no page errors');
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
