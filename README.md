@@ -1,4 +1,4 @@
-# MyMelter PWA 1.4.0
+# MyMelter PWA 1.4.1
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -7,6 +7,13 @@
 - GitHub Pages: 無料で利用可能（公開リポジトリ）
 - iPhone: Safari → 共有 →「ホーム画面に追加」でアプリ風に起動
 - データ: 原則この端末の `localStorage` に保存
+
+## 1.4.1 の修正
+
+- Safari取り込みv13で、動画一覧・深掘りに加えて外部サイト候補も一緒に保存します。
+- `source: browser` のチャンネルで「似たサイトを探す」を押した場合、Workerへ元サイトを再取得せず、Safari取り込み時に保存した候補を表示します。Worker経由をHTTP 403で拒否するサイトでも利用できます。
+- 旧v12以前のSafari取り込みデータは壊さず保持し、候補がない場合だけ「Safariで候補を再取り込み」を表示します。
+- Worker 1.3、画像保存、MP4保存、HLS画質選択／ZIP保存の仕様は変更しません。
 
 ## 1.4.0 の追加機能
 
@@ -194,4 +201,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.4.0 DISCOVER`
+`MyMelter PWA 1.4.1 DISCOVER`
