@@ -906,7 +906,7 @@ function addAllCandidates(){
 
 function applyReaderProfile(channel,items=[]){
   const p=contentProfile(items);channel.contentMode=p.mode;
-  const tabs=$('#readerModeTabs button');
+  const tabs=Array.from(document.querySelectorAll('#readerModeTabs button'));
   const list=tabs.find(b=>b.dataset.readerMode==='list'),media=tabs.find(b=>b.dataset.readerMode==='media'),video=tabs.find(b=>b.dataset.readerMode==='video');
   if(list)list.textContent=p.mode==='article'?'記事':'一覧';
   if(media)media.textContent=p.mode==='image'?'画像':'メディア';
