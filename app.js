@@ -177,9 +177,11 @@ function normalizeChannel(c){
   const deepDiveItems=MyMelterContentEngine.mergeItems(Array.isArray(c?.deepDiveItems)?c.deepDiveItems:[]);
   const categorySnapshots=MyMelterContentEngine.normalizeCategorySnapshots(c?.categorySnapshots||{});
   const unified=MyMelterContentEngine.mergeItems(snapshotItems,deepDiveItems);
-  const inferredType=(c?.type&&c.type!=='mixed')?c.type:MyMelterContentEngine.profile(unified).mode;
+  const autoType=MyMelterContentEngine.profile(unified).mode;
+  const typeLocked=!!c?.typeLocked;
+  const inferredType=typeLocked&&c?.type&&c.type!=='mixed'?c.type:(autoType||c?.type||'mixed');
   return {
-    ...c, genre:inferGenre(c||{}), id:c?.id||uid(), name:c?.name||domainOf(c?.url)||'チャンネル', url:c?.url||'', type:inferredType||'mixed', color:c?.color||colorForType(inferredType||'mixed'),
+    ...c, typeLocked, genre:inferGenre(c||{}), id:c?.id||uid(), name:c?.name||domainOf(c?.url)||'チャンネル', url:c?.url||'', type:inferredType||'mixed', color:c?.color||colorForType(inferredType||'mixed'),
     searchUrl:c?.searchUrl||'', selectors:{item:'',title:'',image:'',link:'',video:'',...(c?.selectors||{})},
     source:c?.source||'', browserSourceUrl:c?.browserSourceUrl||'',
     categoryTabs:Array.isArray(c?.categoryTabs)?c.categoryTabs.map(x=>({name:String(x?.name||'').trim().slice(0,60),url:normalizeUrl(x?.url||'')})).filter(x=>x.name&&x.url):[],
@@ -365,9 +367,10 @@ function openChannelEditor(channel=null){
 }
 function channelFromForm(){
   const url=normalizeUrl($('#channelUrl').value.trim());
-  const existing=state.channels.find(x=>x.id===activeEditId);
+  const existing=state.channels.find(x=>x.id===activeEditId),selectedType=$('#channelType').value;
+  const typeLocked=existing?((existing.typeLocked||false)||selectedType!==existing.type):(selectedType!=='mixed');
   return normalizeChannel({
-    ...existing, genre:$('#channelGenre').value, id:activeEditId||uid(), name:$('#channelName').value.trim()||domainOf(url)||'チャンネル', url, type:$('#channelType').value, color:$('#channelColor').value, searchUrl:$('#searchUrl').value.trim(),
+    ...existing, typeLocked, genre:$('#channelGenre').value, id:activeEditId||uid(), name:$('#channelName').value.trim()||domainOf(url)||'チャンネル', url, type:selectedType, color:$('#channelColor').value, searchUrl:$('#searchUrl').value.trim(),
     selectors:{item:$('#itemSelector').value.trim(),title:$('#titleSelector').value.trim(),image:$('#imageSelector').value.trim(),link:$('#linkSelector').value.trim(),video:$('#videoSelector').value.trim()},
     source:existing?.source||'', browserSourceUrl:existing?.browserSourceUrl||'', snapshotItems:existing?.snapshotItems||[], deepDiveItems:existing?.deepDiveItems||[],
     createdAt:existing?.createdAt||Date.now()
@@ -949,9 +952,10 @@ function consumeBrowserImportHash(){
     if(channel){
       const primary=items.length?items:(channel.snapshotItems||[]);
       const deep=deepItems.length?deepItems:(channel.deepDiveItems||[]);
-      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.categoryTabs=categoryTabs.length?categoryTabs:(channel.categoryTabs||[]); channel.categorySnapshots=Object.keys(categorySnapshots).length?{...(channel.categorySnapshots||{}),...categorySnapshots}:(channel.categorySnapshots||{}); channel.snapshotItems=primary; channel.deepDiveItems=deep; channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.itemCount=primary.length; channel.updatedAt=Date.now();
-      [...primary,...deep].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
-      rememberItems([...primary,...deep]);
+      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.categoryTabs=categoryTabs.length?categoryTabs:(channel.categoryTabs||[]); channel.categorySnapshots=MyMelterContentEngine.normalizeCategorySnapshots(Object.keys(categorySnapshots).length?{...(channel.categorySnapshots||{}),...categorySnapshots}:(channel.categorySnapshots||{})); channel.snapshotItems=MyMelterContentEngine.mergeItems(primary); channel.deepDiveItems=MyMelterContentEngine.mergeItems(deep); channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.updatedAt=Date.now();
+      const unified=MyMelterContentEngine.channelItems(channel);channel.itemCount=unified.length;if(!channel.typeLocked)channel.type=MyMelterContentEngine.profile(unified).mode;
+      unified.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
+      rememberItems(unified);
     }else{
       channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,categoryTabs,categorySnapshots,snapshotItems:items,deepDiveItems:deepItems,relatedSites,relatedSitesVersion:Number(payload?.v||0),itemCount:items.length});
       [...items,...deepItems].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
