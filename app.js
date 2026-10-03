@@ -591,7 +591,7 @@ var collectRelated=function(doc,base){
     ES[host]=1;E.push({n:n,u:p.href,i:im,sc:score});
   })
 };
-var D=function(t,u,p,m,r,k){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var key=k||m||u;if(!u||u.indexOf('http')!==0||!key||S[key])return;S[key]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
+var D=function(t,u,p,m,r,k,y,e){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var key=k||m||u;if(!u||u.indexOf('http')!==0||!key||S[key])return;S[key]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||'',y:y||'',e:(e||'').slice(0,800)})};
 var collect=function(txt,pat){var out=[],re=new RegExp(pat,'g'),m;while((m=re.exec(String(txt||'')))!==null){out.push(m[0]);if(!m[0])re.lastIndex++}return out};
 var texts=function(doc){var body=X(doc.body),r=[],sv=[],m,re1=new RegExp('第\\\\s*(\\\\d+)\\\\s*位','g'),re2=new RegExp('(\\\\d+)\\\\s*回保存','g');while((m=re1.exec(body))!==null)r.push(m[1]);while((m=re2.exec(body))!==null)sv.push(m[1]);return{r:r,s:sv}};
 var postList=function(doc,base){return [].slice.call(doc.querySelectorAll('a[href*="x.com/"][href*="/status/"],a[href*="twitter.com/"][href*="/status/"],a[href*="twitter.com/i/status/"]')).map(function(a){return{u:A(a.getAttribute('href'),base),t:X(a)}})};
@@ -630,18 +630,47 @@ var parseRaw=function(doc,base){
     D(pt?lab+'｜'+pt:lab,src,im,v,rn)
   })
 };
+var adBox=function(el){
+  if(!el)return false;var m=((el.id||'')+' '+(el.className||'')+' '+(el.getAttribute&&el.getAttribute('aria-label')||'')).toLowerCase(),tx=X(el).slice(0,220);
+  return /(^|[ _-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([ _-]|$)/i.test(m)||/【PR】|\[PR\]|広告|スポンサー|sponsored|affiliate|アフィリエイト/i.test(tx)
+};
 var parseGeneric=function(doc,base){
   [].slice.call(doc.querySelectorAll('video[src],source[src],a[href*="video.twimg.com"]')).forEach(function(v){
     var raw=v.getAttribute('src')||v.getAttribute('href')||'',url=A(raw,base),c=v.closest('article,li,section,div')||v.parentElement||v,g=c&&c.querySelector?c.querySelector('img'):null,a=c&&c.querySelector?c.querySelector('a[href]'):null;
-    D(X(c).slice(0,180)||doc.title,(a&&A(a.getAttribute('href'),base))||url,G(g,base),url,'')
+    D(X(c).slice(0,180)||doc.title,(a&&A(a.getAttribute('href'),base))||url,G(g,base),url,'','','video','')
   })
 };
-var parseAll=function(doc,base){var before=I.length;parseTw(doc,base);if(I.length===before)parseGeneric(doc,base);if(I.length===before)parseRaw(doc,base)};
+var parseArticles=function(doc,base){
+  var cards=[].slice.call(doc.querySelectorAll('article,main .post,main .entry,main .item,.post,.entry,[class*="article"],[class*="news-item"]')),count=0;
+  cards.forEach(function(card){
+    if(count>=40||adBox(card))return;var a=card.querySelector('h1 a[href],h2 a[href],h3 a[href],a[href]');if(!a)return;
+    var u=A(a.getAttribute('href'),base),t=X(card.querySelector('h1,h2,h3,h4')||a).slice(0,220);if(!u||!t||u===base)return;
+    var g=card.querySelector('img'),im=G(g,base),p=card.querySelector('p,.excerpt,.summary,.description'),ex=X(p).slice(0,700);
+    D(t,u,im,'','',u,'article',ex);count++
+  });
+  if(count)return;
+  [].slice.call(doc.querySelectorAll('main h2 a[href],main h3 a[href],h2.entry-title a[href],h3.entry-title a[href]')).slice(0,40).forEach(function(a){var u=A(a.getAttribute('href'),base),t=X(a).slice(0,220);if(u&&t)D(t,u,'','','',u,'article','')})
+};
+var parseImages=function(doc,base){
+  var count=0;[].slice.call(doc.querySelectorAll('main img,article img,[class*="gallery"] img,[class*="photo"] img')).forEach(function(img){
+    if(count>=60||adBox(img.closest('a,figure,div,section')||img))return;
+    var src=G(img,base);if(!src)return;var w=Number(img.naturalWidth||img.getAttribute('width')||0),h=Number(img.naturalHeight||img.getAttribute('height')||0);if((w&&w<180)||(h&&h<140))return;
+    var a=img.closest('a[href]'),u=a?A(a.getAttribute('href'),base):src,t=(img.getAttribute('alt')||X(a)||doc.title||'画像').slice(0,220);
+    D(t,u,src,'','','img:'+src,'image','');count++
+  })
+};
+var parseAll=function(doc,base){
+  var before=I.length;parseTw(doc,base);
+  if(I.length===before)parseGeneric(doc,base);
+  if(I.length===before)parseRaw(doc,base);
+  if(I.length===before)parseArticles(doc,base);
+  if(I.length===before)parseImages(doc,base)
+};
 var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},8000);fr.style.cssText='position:fixed!important;left:-10000px!important;top:0!important;width:2px!important;height:2px!important;opacity:.01!important;pointer-events:none!important;border:0!important';fr.onload=function(){if(done)return;setTimeout(function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)},250)};fr.src=url;document.body.appendChild(fr)})};
 if(WEBSEARCH){
   collectSearchResults(document,location.href);
   if(!E.length){alert('MyMelter: Web検索結果から候補を検出できませんでした');return}
-  var WP={v:15,m:'web-search',s:location.href,n:document.title,q:(new URL(location.href)).searchParams.get('q')||'',i:[],d:[],e:E.slice(0,30)};
+  var WP={v:16,m:'web-search',s:location.href,n:document.title,q:(new URL(location.href)).searchParams.get('q')||'',i:[],d:[],e:E.slice(0,30)};
   var WJ=JSON.stringify(WP),WB=new TextEncoder().encode(WJ),WQ='';for(var wi=0;wi<WB.length;wi++)WQ+=String.fromCharCode(WB[wi]);
   location.href=R+'#mmimport='+encodeURIComponent(btoa(WQ));return
 }
@@ -689,7 +718,7 @@ while(creatorQueue.length&&creators<3&&I.length<80){
 var primary=I.slice(0,primaryEnd),deep=I.slice(primaryEnd);
 I=I.slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
 if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:15,m:'site',s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30)};
+var P={v:16,m:'site',s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30)};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -701,7 +730,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='Safari取り込み v15。広告・PR除外と小型サムネイルに加え、Web検索結果から似たサイト候補だけをMyMelterへ戻せます。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='Safari取り込み v16。動画・画像・記事を自動判定して取り込み、広告・PRを除外します。Web検索の似たサイト候補取り込みも維持しています。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -783,7 +812,7 @@ function consumeBrowserImportHash(){
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); state.meta.browserImportVersion=Math.max(Number(state.meta.browserImportVersion||0),Number(payload?.v||0)); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<15?'（取込コードv15へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<16?'（取込コードv16へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -2006,14 +2035,14 @@ function webSimilarSearchQuery(channel){
 }
 function renderWebSimilarFallback(channel,message=''){
   const text=message||'元ページ内に十分な関連リンクがありません。Web検索から候補を探せます。';
-  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv15への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
+  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv16への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
 }
 function startWebSimilarSearch(channel){
   if(!channel)return;
   const query=webSimilarSearchQuery(channel),url='https://html.duckduckgo.com/html/?q='+encodeURIComponent(query);
   state.meta.pendingWebSimilar={channelId:channel.id,query,at:Date.now()};saveState(false);
   const v=Number(state.meta.browserImportVersion||channel.relatedSitesVersion||0);
-  toast(v<15?'検索結果でv15の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
+  toast(v<16?'検索結果でv16の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
   const win=window.open(url,'_blank','noopener');if(!win)window.location.href=url;
 }
 async function runSimilarDiscovery(channel){
