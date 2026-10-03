@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.4';
+const APP_VERSION = '1.5.5';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -1183,13 +1183,14 @@ function openActiveItem(index){
 
 function extractReadableArticle(text,url,hintTitle=''){
   const doc=new DOMParser().parseFromString(text,'text/html');
+  const title=(doc.querySelector('meta[property="og:title"]')?.content||doc.querySelector('h1')?.textContent||hintTitle||doc.title||domainOf(url)).replace(/\s+/g,' ').trim().slice(0,300);
   doc.querySelectorAll('script,style,noscript,iframe,form,nav,footer,header,aside,[hidden],[aria-hidden="true"]').forEach(x=>x.remove());
   [...doc.querySelectorAll('*')].filter(adLikeElement).forEach(x=>x.remove());
-  const candidates=[...doc.querySelectorAll('article,[role="main"],main,.entry-content,.post-content,.article-body,.story-body,.article-content,.post-body')];
+  const selectors='article,[role="main"],main,.entry-content,.post-content,.article-body,.article-body-inner,.article-body-more,.article-content,.article-content-inner,.article-main,.story-body,.post-body,.entry-body,.posted-body,.articleBody,.blogbody,[class*="article-body"],[class*="entry-body"]';
+  const candidates=[...doc.querySelectorAll(selectors)];
   let root=candidates.sort((a,b)=>(b.textContent||'').trim().length-(a.textContent||'').trim().length)[0]||doc.body;
-  const title=(doc.querySelector('meta[property="og:title"]')?.content||doc.querySelector('h1')?.textContent||hintTitle||doc.title||domainOf(url)).replace(/\s+/g,' ').trim().slice(0,300);
   const blocks=[],seenText=new Set();
-  for(const el of root.querySelectorAll('h1,h2,h3,p,blockquote,li,img')){
+  for(const el of root.querySelectorAll('h1,h2,h3,p,blockquote,li,pre,img')){
     if(adLikeElement(el)||el.closest('nav,footer,header,aside'))continue;
     if(el.tagName==='IMG'){
       const raw=el.getAttribute('data-src')||el.getAttribute('src')||el.getAttribute('data-original')||el.getAttribute('data-lazy-src')||'';
@@ -1203,7 +1204,24 @@ function extractReadableArticle(text,url,hintTitle=''){
     blocks.push({kind:/^H[1-3]$/.test(el.tagName)?'heading':el.tagName==='BLOCKQUOTE'?'quote':'text',text:value.slice(0,3000)});
     if(blocks.length>=220)break;
   }
-  const textLength=blocks.filter(x=>x.text).reduce((n,x)=>n+x.text.length,0);
+  let textLength=blocks.filter(x=>x.text).reduce((n,x)=>n+x.text.length,0);
+  if(textLength<80){
+    const keepImages=blocks.filter(x=>x.kind==='image'),clone=root.cloneNode(true);
+    clone.querySelectorAll('script,style,noscript,iframe,form,nav,footer,header,aside').forEach(x=>x.remove());
+    [...clone.querySelectorAll('*')].filter(adLikeElement).forEach(x=>x.remove());
+    clone.querySelectorAll('br').forEach(br=>br.replaceWith(document.createTextNode('\n')));
+    clone.querySelectorAll('p,div,section,article,li,blockquote,pre,h1,h2,h3,h4,td').forEach(el=>el.appendChild(document.createTextNode('\n')));
+    const lines=(clone.textContent||'').split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
+    const clean=[],seen=new Set();
+    for(const line of lines){
+      if(line.length<2||seen.has(line)||adLikeText(line))continue;
+      if(/^(人気記事|関連記事|おすすめ記事|コメント|コメントする|カテゴリー|カテゴリ|トップへ|ホーム)$/i.test(line))continue;
+      if(/cookie|プライバシーポリシー|利用規約|シェアする|フォローする/i.test(line)&&line.length<120)continue;
+      seen.add(line);clean.push({kind:'text',text:line.slice(0,3000)});if(clean.length>=220)break;
+    }
+    blocks.length=0;blocks.push(...clean,...keepImages);
+    textLength=clean.reduce((n,x)=>n+x.text.length,0);
+  }
   return {title,blocks,textLength};
 }
 function articleBlocksHTML(article){
