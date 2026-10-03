@@ -1352,18 +1352,35 @@ function extractCommentBlocks(doc,root,seenText=new Set()){
   }
   return blocks;
 }
+function articleNodeScore(el){
+  if(!el)return -Infinity;
+  const text=(el.textContent||'').replace(/\s+/g,' ').trim(),len=text.length;if(len<40)return -Infinity;
+  const meta=((el.id||'')+' '+(typeof el.className==='string'?el.className:'')+' '+(el.getAttribute?.('role')||'')).toLowerCase();
+  if(/(?:^|[\s_-])(nav|menu|sidebar|related|recommend|ranking|footer|header|advert|sponsor|pager|pagination)(?:[\s_-]|$)/i.test(meta))return -10000;
+  const linkText=[...el.querySelectorAll('a')].reduce((n,a)=>n+(a.textContent||'').trim().length,0);
+  const linkRatio=Math.min(1,linkText/Math.max(1,len));
+  const p=el.querySelectorAll('p').length,br=el.querySelectorAll('br').length,heads=el.querySelectorAll('h1,h2,h3').length,imgs=el.querySelectorAll('img').length;
+  const threadHits=(text.match(/(?:^|\s)\d{1,5}\s*[:：][^\n]{0,120}(?:ID:|以下、|名無しさん|名無し)/g)||[]).length;
+  const semantic=/article|entry|post|story|content|body|main/.test(meta)?22:0;
+  return Math.min(len,18000)/85+p*7+Math.min(br,80)*1.2+heads*3+Math.min(imgs,20)*1.5+threadHits*14+semantic-linkRatio*95;
+}
+function selectReadableRoot(doc){
+  const selectors='[itemprop="articleBody"],.article-body-inner,.article-body-more,.entry-content,.post-content,.article-content-inner,.article-content,.story-body,.post-body,.entry-body,.posted-body,.articleBody,.blogbody,[class*="article-body"],[class*="entry-body"],article,[role="main"],main,.article-main';
+  const candidates=[...new Set([...doc.querySelectorAll(selectors)])].filter(x=>!x.closest('nav,footer,header,aside'));
+  let best=doc.body,bestScore=articleNodeScore(best);
+  for(const el of candidates){const score=articleNodeScore(el);if(score>bestScore){best=el;bestScore=score;}}
+  return best||doc.body;
+}
 function extractReadableArticle(text,url,hintTitle=''){
   const doc=new DOMParser().parseFromString(text,'text/html');
   const title=(doc.querySelector('meta[property="og:title"]')?.content||doc.querySelector('h1')?.textContent||hintTitle||doc.title||domainOf(url)).replace(/\s+/g,' ').trim().slice(0,300);
   doc.querySelectorAll('script,style,noscript,iframe,form,nav,footer,header,aside,[hidden],[aria-hidden="true"]').forEach(x=>x.remove());
   [...doc.querySelectorAll('*')].filter(adLikeElement).forEach(x=>x.remove());
-  const preferredSelectors='[itemprop="articleBody"],.article-body-inner,.article-body-more,.entry-content,.post-content,.article-content-inner,.article-content,.story-body,.post-body,.entry-body,.posted-body,.articleBody,.blogbody,[class*="article-body"],[class*="entry-body"]';
-  const preferred=[...doc.querySelectorAll(preferredSelectors)].filter(x=>(x.textContent||'').trim().length>=40);
-  const fallback=[...doc.querySelectorAll('article,[role="main"],main,.article-main')].filter(x=>(x.textContent||'').trim().length>=40);
-  let root=(preferred.length?preferred:fallback).sort((a,b)=>(b.textContent||'').trim().length-(a.textContent||'').trim().length)[0]||doc.body;
+  let root=selectReadableRoot(doc);
   const blocks=[],seenText=new Set();
   const threadBlocks=groupThreadCommentLines(readableLinesFromNode(root));
   if(threadBlocks.length>=2){
+    blocks.push({kind:'comments-heading',text:'レス'});
     blocks.push(...threadBlocks);
     threadBlocks.forEach(x=>seenText.add(x.text));
     for(const img of root.querySelectorAll('img')){
