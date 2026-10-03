@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.4.2';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -498,7 +498,7 @@ function parseChannelContent(text,channel,baseUrl){
   return parseHtml(text,channel,baseUrl);
 }
 
-function candidateFrom(url,name,type='mixed',extra={}){ return {id:uid(),url:normalizeUrl(url),name:name||domainOf(url),type,color:colorForType(type),selectors:{item:'',title:'',image:'',link:'',video:'',...(extra.selectors||{})},searchUrl:extra.searchUrl||'',source:extra.source||'auto'}; }
+function candidateFrom(url,name,type='mixed',extra={}){ return {id:uid(),url:normalizeUrl(url),name:name||domainOf(url),type,color:colorForType(type),image:normalizeUrl(extra.image||extra.thumbnail||''),similarityScore:Number(extra.similarityScore||0),selectors:{item:'',title:'',image:'',link:'',video:'',...(extra.selectors||{})},searchUrl:extra.searchUrl||'',source:extra.source||'auto'}; }
 function guessTypeFromText(text='',url=''){ const s=`${text} ${url}`.toLowerCase(); if(/video|movie|動画|youtube|vimeo/.test(s))return'video'; if(/image|photo|gallery|写真|画像|pix/.test(s))return'image'; if(/blog|news|article|post|記事|ニュース/.test(s))return'article'; if(/rss|atom|feed/.test(s))return'feed'; return'mixed'; }
 
 function myMelterReturnUrl(){
@@ -518,10 +518,18 @@ var collectRelated=function(doc,base){
   [].slice.call(doc.querySelectorAll('a[href]')).forEach(function(a){
     var u=A(a.getAttribute('href'),base),n=X(a).slice(0,100),p;try{p=new URL(u)}catch(e){return}
     if(!u||!n||!/^https?:$/.test(p.protocol)||p.origin===origin||p.username||p.password||ES[p.hostname])return;
-    if(/(^|\\.)((x|twitter)\\.com|t\\.co|video\\.twimg\\.com|pbs\\.twimg\\.com)$/i.test(p.hostname))return;
-    var sig=(n+' '+u+' '+X(a.parentElement).slice(0,240)).toLowerCase();
-    if(/\\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|[?#])/i.test(u)||/ログイン|privacy|利用規約|広告|login|sign.?up|share|facebook\\.com\\/sharer|twitter\\.com\\/intent|x\\.com\\/intent/i.test(sig))return;
-    ES[p.hostname]=1;E.push({n:n,u:p.href});
+    var host=p.hostname.toLowerCase(),parent=a.closest('aside,nav,footer,section,div,li')||a.parentElement,context=X(parent).slice(0,360),rel=String(a.getAttribute('rel')||''),sig=(n+' '+u+' '+context+' '+rel).toLowerCase();
+    var generic=/^(保存|開く|詳細|こちら|もっと見る|続きを読む|今すぐ|無料|登録|入会|ダウンロード|download|open|more)$/i.test(n);
+    var ad=/【?pr】?|広告|スポンサー|sponsored|アフィリエイト|affiliate|アダルトチャット|チャット広告|キャンペーン|promoted|promotion/i.test(sig);
+    var adhost=/(^|\\.)(doubleclick\\.net|googlesyndication\\.com|adservice\\.google\\.com|adnxs\\.com|taboola\\.com|outbrain\\.com|criteo\\.com|exoclick\\.com|trafficjunky\\.com|popads\\.net|propellerads\\.com|adsterra\\.com)$/i.test(host);
+    if(generic||ad||adhost||/(^|\\.)((x|twitter)\\.com|t\\.co|video\\.twimg\\.com|pbs\\.twimg\\.com)$/i.test(host))return;
+    if(/\\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|[?#])/i.test(u)||/login|sign.?up|share|facebook\\.com\\/sharer|twitter\\.com\\/intent|x\\.com\\/intent/i.test(sig))return;
+    var relation=/関連|おすすめ|姉妹|相互|リンク集|友達|related|recommend|partner|similar/i.test(sig);
+    var relatedBox=!!a.closest('[class*="related"],[class*="recommend"],[class*="partner"],[class*="linklist"],[class*="links"]');
+    var score=(relation?5:0)+(relatedBox?2:0)+(n.length>=4?1:0);
+    if(score<4)return;
+    var im='',near=a.querySelector('img')||(parent&&parent.querySelector?parent.querySelector('img'):null);if(near)im=G(near,base);
+    ES[host]=1;E.push({n:n,u:p.href,i:im,sc:score});
   })
 };
 var D=function(t,u,p,m,r,k){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var key=k||m||u;if(!u||u.indexOf('http')!==0||!key||S[key])return;S[key]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||''})};
@@ -615,7 +623,7 @@ while(creatorQueue.length&&creators<3&&I.length<80){
 var primary=I.slice(0,primaryEnd),deep=I.slice(primaryEnd);
 I=I.slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
 if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:13,s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30)};
+var P={v:14,s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30)};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -627,7 +635,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='Safari取り込み v13。動画一覧・深掘りに加えて「似たサイト」候補も取り込みます。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='Safari取り込み v14。広告・PRリンクを除外し、「似たサイト」候補の小型サムネイルも一緒に取り込みます。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -675,25 +683,26 @@ function consumeBrowserImportHash(){
     const deepItems=uniqueBy(mapImported(payload?.d,true),x=>x.videoUrl||x.url).filter(x=>!primaryKeys.has(x.videoUrl||x.url)).slice(0,60);
     const sourceOrigin=new URL(source).origin,registeredDomains=new Set(state.channels.map(x=>domainOf(x.url)).filter(Boolean));
     const relatedSites=uniqueBy((Array.isArray(payload?.e)?payload.e:[]).map(x=>{
-      const url=normalizeUrl(x?.u||''),name=String(x?.n||domainOf(url)||'関連サイト').trim().slice(0,120);if(!url||!name)return null;
+      const url=normalizeUrl(x?.u||''),name=String(x?.n||domainOf(url)||'関連サイト').trim().slice(0,120),image=normalizeUrl(x?.i||''),similarityScore=Number(x?.sc||0);if(!url||!name)return null;
       if(new URL(url).origin===sourceOrigin||registeredDomains.has(domainOf(url)))return null;
-      const type=guessTypeFromText(name,url);return {name,url,type,genre:inferGenre({name,url,type}),source:'safari-related'};
+      const type=guessTypeFromText(name,url),candidate={name,url,image,similarityScore,type,genre:inferGenre({name,url,type}),source:'safari-related'};
+      return isSuitableSimilarCandidate(candidate,null)?candidate:null;
     }).filter(Boolean),x=>domainOf(x.url)).slice(0,30);
     if(!items.length&&!deepItems.length) throw new Error('取り込める項目がありません');
     let channel=state.channels.find(c=>c.source==='browser'&&canonicalBrowserSourceUrl(c.browserSourceUrl||c.url)===source);
     if(channel){
       const primary=items.length?items:(channel.snapshotItems||[]);
       const deep=deepItems.length?deepItems:(channel.deepDiveItems||[]);
-      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.snapshotItems=primary; channel.deepDiveItems=deep; channel.relatedSites=relatedSites.length?relatedSites:(Array.isArray(channel.relatedSites)?channel.relatedSites:[]); channel.itemCount=primary.length; channel.updatedAt=Date.now();
+      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.snapshotItems=primary; channel.deepDiveItems=deep; channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.itemCount=primary.length; channel.updatedAt=Date.now();
       [...primary,...deep].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       rememberItems([...primary,...deep]);
     }else{
-      channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,snapshotItems:items,deepDiveItems:deepItems,relatedSites,itemCount:items.length});
+      channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,snapshotItems:items,deepDiveItems:deepItems,relatedSites,relatedSitesVersion:Number(payload?.v||0),itemCount:items.length});
       [...items,...deepItems].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<13?'（取込コードv13へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<14?'（取込コードv14へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -740,10 +749,18 @@ async function discoverChannels(url,similarTo=null){
   return uniqueBy(candidates.filter(c=>c.url),c=>c.url).slice(0,30);
 }
 
+function candidateThumbUrl(c){
+  const image=normalizeUrl(c?.image||c?.thumbnail||'');if(image)return image;
+  try{return new URL('/favicon.ico',c?.url||'').href;}catch{return '';}
+}
+function candidateThumbHTML(c){
+  const src=candidateThumbUrl(c),fallback='<span class="result-thumb-fallback">'+esc(typeGlyph(c.type))+'</span>';
+  return '<span class="result-thumb">'+fallback+(src?'<img src="'+esc(src)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>';
+}
 function renderDiscoveryResults(list){
   const root=$('#discoverResults');
-  if(!list.length){root.innerHTML=`<div class="empty-card">追加候補を見つけられませんでした。手動追加はできます。</div>`;return;}
-  root.innerHTML=`<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="mini-primary" data-add-all-candidates>まとめて追加</button></div>`+list.map(c=>`<article class="discover-result"><span class="result-icon">${esc(typeGlyph(c.type))}</span><div class="result-copy"><strong>${esc(c.name)}</strong><small>${esc(typeLabel(c.type))} · ${esc(c.url)}</small></div><button class="mini-secondary" data-preview-candidate="${esc(c.id)}">確認</button><button class="mini-primary" data-add-candidate="${esc(c.id)}">＋ 追加</button></article>`).join('');
+  if(!list.length){root.innerHTML=`<div class="empty-card">信頼できる似たサイト候補を見つけられませんでした。広告やPRは候補から除外しています。</div>`;return;}
+  root.innerHTML=`<div class="discover-results-head"><button class="mini-primary" data-add-all-candidates>まとめて追加</button></div>`+list.map(c=>`<article class="discover-result">${candidateThumbHTML(c)}<div class="result-copy"><strong>${esc(c.name)}</strong><small>${esc(typeLabel(c.type))} · ${esc(c.url)}</small></div><div class="result-actions"><button class="mini-secondary" data-preview-candidate="${esc(c.id)}">確認</button><button class="mini-primary" data-add-candidate="${esc(c.id)}">＋ 追加</button></div></article>`).join('');
 }
 async function runDiscovery(){
   const url=$('#discoverUrl').value.trim(); if(!normalizeUrl(url)){toast('URLを確認してください');return;}
@@ -1756,18 +1773,43 @@ probeWorkerDownloadCapability(true);
 if(state.channels.length){try{saveState(false);}catch(e){console.warn('ジャンル補完の保存に失敗',e);}}
 if(importedBrowserChannel){setTimeout(()=>openChannel(importedBrowserChannel),0);}
 
+function similarCandidateSignals(name='',url='',context='',rel=''){
+  const text=`${name} ${url} ${context} ${rel}`,label=String(name||'').trim(),host=domainOf(url).toLowerCase();
+  const generic=/^(保存|開く|詳細|こちら|もっと見る|続きを読む|今すぐ|無料|登録|入会|ダウンロード|download|open|more)$/i.test(label);
+  const ad=/【?pr】?|広告|スポンサー|sponsored|アフィリエイト|affiliate|アダルトチャット|チャット広告|キャンペーン|promoted|promotion/i.test(text);
+  const adHost=/(^|\.)(doubleclick\.net|googlesyndication\.com|adservice\.google\.com|adnxs\.com|taboola\.com|outbrain\.com|criteo\.com|exoclick\.com|trafficjunky\.com|popads\.net|propellerads\.com|adsterra\.com)$/i.test(host);
+  const relation=/関連|おすすめ|姉妹|相互|リンク集|友達|related|recommend|partner|similar/i.test(`${context} ${rel}`);
+  return {generic,ad,adHost,relation};
+}
+function isSuitableSimilarCandidate(candidate,channel=null,context='',rel=''){
+  const url=normalizeUrl(candidate?.url||''),name=String(candidate?.name||'').trim();if(!url||!name)return false;
+  const s=similarCandidateSignals(name,url,context,rel);if(s.generic||s.ad||s.adHost)return false;
+  const score=Number(candidate?.similarityScore||0);
+  if(score>=4)return true;
+  if(!channel)return false;
+  const type=candidate?.type||guessTypeFromText(name,url),sameGenre=inferGenre({name,url,type})===inferGenre(channel);
+  return s.relation||(sameGenre&&score>=2);
+}
+function relatedLinkImage(a,base){
+  const img=a?.querySelector?.('img')||a?.closest?.('aside,nav,footer,section,div,li')?.querySelector?.('img');
+  const raw=img?.getAttribute?.('data-src')||img?.getAttribute?.('src')||img?.getAttribute?.('data-original')||img?.getAttribute?.('data-lazy-src')||'';
+  return absoluteUrl(raw,base);
+}
 function externalSiteCandidates(doc,base,channel){
-  const seen=new Set(state.channels.map(c=>normalizeUrl(c.url))),origin=new URL(base).origin;
+  const seenDomains=new Set(state.channels.map(c=>domainOf(c.url)).filter(Boolean)),origin=new URL(base).origin;
   const genre=inferGenre(channel),list=[];
   for(const a of doc.querySelectorAll('a[href]')){
     const url=MyMelterFeatures.safeUrl(a.getAttribute('href'),base),name=(a.textContent||a.getAttribute('title')||'').replace(/\s+/g,' ').trim();
-    if(!url||new URL(url).origin===origin||seen.has(url)||!name||name.length>100)continue;
-    if(/\.(?:mp4|m3u8|png|jpe?g|zip|pdf)(?:$|\?)/i.test(url)||/ログイン|privacy|利用規約|広告|login|sign.?up|share|facebook\.com\/sharer|twitter\.com\/intent/i.test(name+' '+url))continue;
-    const inferred=inferGenre({name,url,type:guessTypeFromText(name,url)});
-    const context=(a.parentElement?.textContent||'').slice(0,500);
-    const relation=/関連|おすすめ|相互|リンク集|友達|related|recommend|blogroll|partner/i.test(context+' '+a.rel);
-    if(inferred!==genre&&!relation)continue;
-    list.push({...candidateFrom(url,name,guessTypeFromText(name,url),{source:'external-link'}),genre:inferred,similarityScore:(inferred===genre?2:0)+(relation?1:0)});
+    if(!url||new URL(url).origin===origin||seenDomains.has(domainOf(url))||!name||name.length>100)continue;
+    if(/\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|\?)/i.test(url))continue;
+    const context=(a.closest('aside,nav,footer,section,div,li')?.textContent||'').slice(0,500),rel=String(a.getAttribute('rel')||''),signals=similarCandidateSignals(name,url,context,rel);
+    if(signals.generic||signals.ad||signals.adHost)continue;
+    const type=guessTypeFromText(name+' '+context,url),inferred=inferGenre({name,url,type}),sameGenre=inferred===genre;
+    const relatedBox=!!a.closest('[class*="related"],[class*="recommend"],[class*="partner"],[class*="linklist"],[class*="links"]');
+    const score=(signals.relation?5:0)+(relatedBox?2:0)+(sameGenre?2:0)+(name.length>=4?1:0);
+    const candidate={...candidateFrom(url,name,type,{source:'external-link',image:relatedLinkImage(a,base),similarityScore:score}),genre:inferred,similarityScore:score};
+    if(!isSuitableSimilarCandidate(candidate,channel,context,rel))continue;
+    list.push(candidate);
   }
   return uniqueBy(list.sort((a,b)=>b.similarityScore-a.similarityScore),c=>domainOf(c.url)).slice(0,12);
 }
@@ -1775,23 +1817,25 @@ async function runSimilarDiscovery(channel){
   const status=$('#discoverStatus');$('#discoverUrl').value=channel.url;$('#discoverResults').innerHTML='';status.textContent='関連リンクから似たサイト候補を探しています…';
   if(!$('#discoverDialog').open)$('#discoverDialog').showModal();$('#runDiscoveryBtn').disabled=true;
   if(channel.source==='browser'){
+    if(Number(channel.relatedSitesVersion||0)<14){
+      state.candidates=[];renderCandidates();
+      status.textContent='このSafari取り込みは旧版です。広告除外とサムネイル対応のv14で1回だけ再取り込みしてください。';
+      $('#discoverResults').innerHTML=`<div class="browser-fallback-card"><strong>Safariから似たサイト候補を更新できます</strong><small>v14では広告・PRを除外し、候補の小型サムネイルも一緒に取り込みます。</small><button type="button" class="primary" data-browser-import-target="${esc(channel.browserSourceUrl||channel.url)}">Safariで候補を再取り込み</button></div>`;
+      $('#runDiscoveryBtn').disabled=false;return;
+    }
     const list=uniqueBy((Array.isArray(channel.relatedSites)?channel.relatedSites:[]).map(x=>{
       const url=normalizeUrl(x?.url||''),name=String(x?.name||domainOf(url)||'関連サイト').trim();if(!url||!name)return null;
       if(state.channels.some(c=>domainOf(c.url)===domainOf(url)))return null;
-      const type=x.type||guessTypeFromText(name,url);return {...candidateFrom(url,name,type,{source:'safari-related'}),genre:x.genre||inferGenre({name,url,type})};
+      const type=x.type||guessTypeFromText(name,url),candidate={...candidateFrom(url,name,type,{source:'safari-related',image:x.image,similarityScore:x.similarityScore}),genre:x.genre||inferGenre({name,url,type}),similarityScore:Number(x.similarityScore||0)};
+      return isSuitableSimilarCandidate(candidate,null)?candidate:null;
     }).filter(Boolean),c=>domainOf(c.url)).slice(0,12);
-    state.candidates=list;state.meta.lastDiscoveryUrl=channel.url;state.meta.lastDiscoveryAt=Date.now();saveState(false);renderCandidates();
-    if(list.length){
-      renderDiscoveryResults(list);status.textContent=`${list.length}件の候補（Safari取り込み時に保存済み）。Workerへ再アクセスせず表示しています。`;
-    }else{
-      status.textContent='このSafari取り込みデータには似たサイト候補がありません。v13で1回だけ再取り込みしてください。';
-      $('#discoverResults').innerHTML=`<div class="browser-fallback-card"><strong>Safariから似たサイト候補を更新できます</strong><small>Workerで再取得せず、Safariで表示できる実ページから外部サイト候補を一緒に取り込みます。</small><button type="button" class="primary" data-browser-import-target="${esc(channel.browserSourceUrl||channel.url)}">Safariで候補を再取り込み</button></div>`;
-    }
+    state.candidates=list;state.meta.lastDiscoveryUrl=channel.url;state.meta.lastDiscoveryAt=Date.now();saveState(false);renderCandidates();renderDiscoveryResults(list);
+    status.textContent=list.length?`${list.length}件の候補。広告・PRを除外し、Safari取り込み時の情報だけで表示しています。`:'信頼できる関連候補がありません。広告・PRは表示していません。';
     $('#runDiscoveryBtn').disabled=false;return;
   }
   try{const list=(await discoverChannels(channel.url,channel)).filter(c=>!state.channels.some(x=>normalizeUrl(x.url)===normalizeUrl(c.url)));
     state.candidates=list;state.meta.lastDiscoveryUrl=channel.url;state.meta.lastDiscoveryAt=Date.now();saveState(false);renderCandidates();renderDiscoveryResults(list);
-    status.textContent=list.length?`${list.length}件の候補（外部リンクを含む）。内容を確認してから追加してください。`:'関連候補がありません。検索エンジンによる全Web検索は行いません。';
+    status.textContent=list.length?`${list.length}件の候補。広告・PRを除外し、関連性の高い候補だけ表示しています。`:'信頼できる関連候補がありません。広告・PRは表示していません。';
   }catch(e){status.textContent='取得失敗：'+e.message;}finally{$('#runDiscoveryBtn').disabled=false;}
 }
 function isHls(url){return /\.m3u8(?:$|[?#])/i.test(url||'');}
