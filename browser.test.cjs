@@ -67,6 +67,28 @@ const articlePages=await page.evaluate(async()=>{
   const old=fetchText;fetchText=async u=>docs[u]||'';const out=await loadReadableArticlePages({title:'記事',url:'https://article-pages.example/a',type:'article'},5);fetchText=old;
   return {pages:out.pages,text:out.blocks.filter(x=>x.text).map(x=>x.text).join(' '),next:articleContinuationUrl(docs['https://article-pages.example/a'],'https://article-pages.example/a')};
 });assert.equal(articlePages.pages,3);assert.match(articlePages.text,/1ページ目/);assert.match(articlePages.text,/2ページ目/);assert.match(articlePages.text,/3ページ目/);assert.equal(articlePages.next,'https://article-pages.example/a?page=2');
+const fixtureRegression=await page.evaluate((fx)=>{
+  const mk=(id,name,url)=>normalizeChannel({id,name,url,type:'mixed'});
+  const video=parseHtml(fx.videoRanking,mk('fv','Video','https://fixture.example/'),'https://fixture.example/');
+  const article=extractReadableArticle(fx.articleStandard,'https://fixture.example/article','標準記事');
+  const thread=extractReadableArticle(fx.articleThread,'https://fixture.example/thread','スレッド記事');
+  const images=parseHtml(fx.imageGallery,mk('fi','Images','https://fixture.example/'),'https://fixture.example/');
+  const mixed=parseHtml(fx.mixed,mk('fm','Mixed','https://fixture.example/'),'https://fixture.example/');
+  return {
+    engine:!!window.MyMelterContentEngine,
+    videoKinds:video.map(mediaKind),videoMode:contentProfile(video).mode,
+    articleText:article.blocks.filter(x=>x.text).map(x=>x.text).join(' '),
+    threadComments:thread.blocks.filter(x=>x.kind==='comment').map(x=>x.text),
+    imageKinds:images.map(mediaKind),imageMode:contentProfile(images).mode,
+    mixedKinds:mixed.map(mediaKind),mixedMode:contentProfile(mixed).mode
+  };
+},FIXTURES);
+assert.equal(fixtureRegression.engine,true);
+assert.equal(fixtureRegression.videoMode,'video');assert.ok(fixtureRegression.videoKinds.every(x=>x==='video'));
+assert.match(fixtureRegression.articleText,/標準的な記事本文/);assert.doesNotMatch(fixtureRegression.articleText,/関連記事 関連記事/);
+assert.equal(fixtureRegression.threadComments.length,5);assert.match(fixtureRegression.threadComments[0],/最初のレス本文/);assert.match(fixtureRegression.threadComments[1],/二番目のレス本文/);
+assert.equal(fixtureRegression.imageMode,'image');assert.ok(fixtureRegression.imageKinds.every(x=>x==='image'));
+assert.equal(fixtureRegression.mixedMode,'mixed');assert.ok(fixtureRegression.mixedKinds.includes('video'));assert.ok(fixtureRegression.mixedKinds.includes('article'));assert.ok(fixtureRegression.mixedKinds.includes('image'));
 const groupedThread=await page.evaluate(()=>{
   const html='<html><body><main><div class="sidebar">人気記事 次の記事 関連記事 いっぱい</div><div class="article-body-inner"><div>1: 以下、ニュー速クオリティでお送りします 2026/08/01 ID:AAA111</div><div>最初のレス本文です。メガネの話を続けます。</div><div>2: 以下、ニュー速クオリティでお送りします 2026/08/01 ID:BBB222</div><div>&gt;&gt;1 二つ目のレス本文です。</div><div>3: 以下、ニュー速クオリティでお送りします 2026/08/01 ID:CCC333</div><div>三つ目のレス本文です。</div><div>引用元：</div></div></main></body></html>';
   const a=extractReadableArticle(html,'https://news4vip.example/archives/1.html','記事');
@@ -181,5 +203,5 @@ await page.route('https://fixture.example/**',route=>route.fulfill({status:200,c
 await page.evaluate(()=>{fetchText=async()=> '#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:3,\npart.ts\n#EXT-X-ENDLIST';return openQualityPicker({title:'fixture',videoUrl:'https://fixture.example/video.m3u8'},null,true);});
 const downloadEvent=page.waitForEvent('download');await page.locator('[data-quality-start]').click();const download=await downloadEvent;assert.equal(download.suggestedFilename(),'fixture.zip');const zip=fs.readFileSync(await download.path());assert.equal(zip.readUInt32LE(0),0x04034b50);assert.ok(zip.includes(Buffer.from('playlist.m3u8')));assert.ok(zip.includes(Buffer.from('media-00000.ts')));assert.ok(zip.includes(Buffer.from([0x47,0x01,0x02])));
 await page.evaluate(()=>{navigate('channels');state.ui.channelGenre='all';renderChannelManager();});await page.screenshot({path:__dirname+'/../channels-mobile.png',fullPage:true});
-assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.6.6 ranked videos restored in browser lists, grouped forum posts with bodies, Safari v21 live category fallback, missing-source messaging, cached categories, article Reader/comments, HLS/Worker safety; no page errors');
+assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.0 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v21 fallback, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
