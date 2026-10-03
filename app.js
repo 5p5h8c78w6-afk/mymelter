@@ -868,6 +868,17 @@ function addAllCandidates(){
   state.channels=[...add,...state.channels]; state.candidates=[]; saveState(); renderDiscoveryResults([]); toast(`${add.length}件のチャンネルを追加しました`);
 }
 
+function applyReaderProfile(channel,items=[]){
+  const p=contentProfile(items);channel.contentMode=p.mode;
+  const tabs=$('#readerModeTabs button');
+  const list=tabs.find(b=>b.dataset.readerMode==='list'),media=tabs.find(b=>b.dataset.readerMode==='media'),video=tabs.find(b=>b.dataset.readerMode==='video');
+  if(list)list.textContent=p.mode==='article'?'記事':'一覧';
+  if(media)media.textContent=p.mode==='image'?'画像':'メディア';
+  if(video)video.textContent='動画';
+  activeReaderMode=preferredReaderMode(items);
+  tabs.forEach(b=>b.classList.toggle('active',b.dataset.readerMode===activeReaderMode));
+  return p;
+}
 async function openChannel(channel,keyword=''){
   activeChannel=channel; activeReaderMode='list'; activeItems=[];
   $('#readerDomain').textContent=domainOf(channel.url); $('#readerChannelName').textContent=channel.name; $('#readerSearch').value=keyword; setReaderMode('list',false);
@@ -878,13 +889,13 @@ async function openChannel(channel,keyword=''){
     if(channel.source==='browser'&&Array.isArray(channel.snapshotItems)&&channel.snapshotItems.length){
       let items=channel.snapshotItems.map(x=>({...x,channelId:channel.id,channelName:channel.name}));
       if(keyword){const q=keyword.toLowerCase();items=items.filter(x=>(x.title||'').toLowerCase().includes(q));}
-      activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
-      $('#readerStatus').textContent=`${items.length}件 · Safari取込スナップショット`; renderReader(); return;
+      activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); const profile=applyReaderProfile(channel,items); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
+      $('#readerStatus').textContent=`${items.length}件 · Safari取込 · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}`; renderReader(); return;
     }
     const text=await fetchText(url); let items=parseChannelContent(text,channel,url);
     if(keyword&&!channel.searchUrl){const q=keyword.toLowerCase();items=items.filter(x=>(x.title||'').toLowerCase().includes(q));}
-    activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); channel.updatedAt=Date.now(); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
-    $('#readerStatus').textContent=items.length?`${items.length}件取得 · ${domainOf(url)}`:'項目を抽出できませんでした。高度な抽出設定を調整してください。';
+    activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); channel.updatedAt=Date.now(); const profile=applyReaderProfile(channel,items); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
+    $('#readerStatus').textContent=items.length?`${items.length}件取得 · ${domainOf(url)} · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}`:'項目を抽出できませんでした。高度な抽出設定を調整してください。';
     renderReader();
   }catch(e){ $('#readerStatus').textContent=`取得できませんでした：${e.message}`; $('#readerContent').innerHTML=`<div class="empty-card"><strong>取得エラー</strong><br>${esc(e.message)}<br><br><button class="primary" data-open-url="${esc(url)}">サイトを直接開く</button></div>`; }
 }
