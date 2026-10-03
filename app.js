@@ -973,7 +973,8 @@ async function discoverChannels(url,similarTo=null){
     return candidates;
   }
   const doc=new DOMParser().parseFromString(text,'text/html'); const siteTitle=(doc.querySelector('meta[property="og:site_name"]')?.content||doc.title||domainOf(base)).trim();
-  const baseType=doc.querySelector('video, source[src*=".mp4"], source[src*=".m3u8"]')?'video':doc.querySelectorAll('img').length>=8?'image':doc.querySelectorAll('article').length>=3?'article':'mixed';
+  const probeChannel={id:'probe',name:siteTitle,url:base,type:'mixed',selectors:{item:'',title:'',image:'',link:'',video:''}};
+  const baseItems=parseHtml(text,probeChannel,base),baseType=MyMelterContentEngine.profile(baseItems).mode;
   candidates.push(candidateFrom(base,siteTitle,baseType,{source:'page'}));
 
   const feedLinks=[...doc.querySelectorAll('link[rel~="alternate"][type*="rss"],link[rel~="alternate"][type*="atom"]')];
