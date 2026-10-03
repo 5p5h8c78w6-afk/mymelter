@@ -202,9 +202,7 @@ function navigate(name){
 }
 
 function channelPreviewItem(c){
-  const primary=Array.isArray(c?.snapshotItems)?c.snapshotItems:[];
-  const deep=Array.isArray(c?.deepDiveItems)?c.deepDiveItems:[];
-  const items=[...primary,...deep];
+  const items=MyMelterContentEngine.channelItems(c||{});
   return items.find(x=>x?.image)||items.find(x=>x?.videoUrl)||null;
 }
 function channelIconHTML(c){
@@ -530,7 +528,7 @@ function parseHtml(text,channel,baseUrl){
     const timeEl=node.querySelector?.('time[datetime], [data-date], [data-published]'); const publishedRaw=timeEl?.getAttribute?.('datetime')||timeEl?.getAttribute?.('data-date')||timeEl?.getAttribute?.('data-published')||''; const publishedAt=Date.parse(publishedRaw)||0;
     return {id:uid(),title:title.replace(/\s+/g,' ').trim().slice(0,300),url:link,image,videoUrl,type,excerpt,channelId:channel.id,channelName:channel.name,publishedAt};
   }).filter(x=>x.url&&x.title&&!adLikeText(x.title));
-  return uniqueBy(items,x=>x.url).slice(0,160);
+  return MyMelterContentEngine.mergeItems(items).slice(0,160);
 }
 function parseChannelContent(text,channel,baseUrl){
   const xml=parseMaybeXml(text);
@@ -554,7 +552,7 @@ async function loadPaginatedChannelItems(channel,firstText,firstUrl,maxPages=5){
   while(text&&pageUrl&&pages<Math.max(1,maxPages)&&!seenPages.has(pageUrl)){
     seenPages.add(pageUrl);pages++;
     const parsed=parseChannelContent(text,channel,pageUrl).map(x=>({...x,sourcePage:pageUrl}));
-    items=uniqueBy([...items,...parsed],x=>x.url||x.videoUrl||x.id).slice(0,160);
+    items=MyMelterContentEngine.mergeItems(items,parsed).slice(0,160);
     next=nextPageUrlFromHtml(text,pageUrl);
     if(!next||seenPages.has(next)||items.length>=160)break;
     try{text=await fetchText(next);pageUrl=next;}catch{break;}
