@@ -49,6 +49,11 @@ const openPriority=await page.evaluate(()=>{
   openArticleReader=oldA;openVideoFeedItems=oldV;openImageViewer=oldI;
   return {article,video,image};
 });assert.deepEqual(openPriority,{article:1,video:1,image:1});
+const livedoorReader=await page.evaluate(()=>{
+  const html='<html><head><title>テスト記事</title></head><body><div class="article-body-inner">最初の本文です。<br>2行目の本文です。<br><br><div>さらに本文が続きます。広告ではない本文を十分な長さで追加します。</div><div class="sponsored">スポンサー広告</div><img src="/body.jpg" width="640" height="480"></div></body></html>';
+  const article=extractReadableArticle(html,'https://nwknews.example/archives/1.html','テスト記事');
+  return {textLength:article.textLength,text:article.blocks.filter(x=>x.text).map(x=>x.text).join(' '),images:article.blocks.filter(x=>x.kind==='image').map(x=>x.src)};
+});assert.ok(livedoorReader.textLength>=80);assert.match(livedoorReader.text,/最初の本文/);assert.match(livedoorReader.text,/2行目/);assert.doesNotMatch(livedoorReader.text,/スポンサー広告/);assert.deepEqual(livedoorReader.images,['https://nwknews.example/body.jpg']);
 const unified=await page.evaluate(()=>{
   const ch=normalizeChannel({id:'articles',name:'記事サイト',url:'https://news.example/',type:'mixed'});
   const items=parseHtml('<main><article><h2><a href="/a">記事A</a></h2><img src="/a.jpg"><p>本文の概要です</p></article><div class="advertisement"><a href="/ad">広告リンク</a></div><article><h2><a href="/b">記事B</a></h2><p>別の記事本文</p></article></main>',ch,'https://news.example/');
@@ -82,5 +87,5 @@ await page.route('https://fixture.example/**',route=>route.fulfill({status:200,c
 await page.evaluate(()=>{fetchText=async()=> '#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:3,\npart.ts\n#EXT-X-ENDLIST';return openQualityPicker({title:'fixture',videoUrl:'https://fixture.example/video.m3u8'},null,true);});
 const downloadEvent=page.waitForEvent('download');await page.locator('[data-quality-start]').click();const download=await downloadEvent;assert.equal(download.suggestedFilename(),'fixture.zip');const zip=fs.readFileSync(await download.path());assert.equal(zip.readUInt32LE(0),0x04034b50);assert.ok(zip.includes(Buffer.from('playlist.m3u8')));assert.ok(zip.includes(Buffer.from('media-00000.ts')));assert.ok(zip.includes(Buffer.from([0x47,0x01,0x02])));
 await page.evaluate(()=>{navigate('channels');state.ui.channelGenre='all';renderChannelManager();});await page.screenshot({path:__dirname+'/../channels-mobile.png',fullPage:true});
-assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.5.4 reader toolbar scroll behavior, article open, 5-page auto loading, Safari v17 import, unified article/image/video viewing, normalized similar sites, clean Reader, image viewer, Web fallback, scrolling, HLS/Worker safety; no page errors');
+assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.5.5 Livedoor div/br Reader, toolbar scroll behavior, article open, 5-page auto loading, Safari v17 import, unified article/image/video viewing, normalized similar sites, clean Reader, image viewer, Web fallback, scrolling, HLS/Worker safety; no page errors');
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
