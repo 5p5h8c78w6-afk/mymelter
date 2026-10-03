@@ -779,11 +779,23 @@ var parseAll=function(doc,base){
   parseGeneric(doc,base);
   parseRaw(doc,base)
 };
+var compactItems=function(arr){
+  var list=(arr||[]).map(function(x,i){return{x:x,o:i}}),posters={};
+  list.forEach(function(q){if(q.x&&q.x.m&&q.x.i)posters[q.x.i]=1});
+  list=list.filter(function(q){return !(q.x&&q.x.y==='image'&&q.x.i&&posters[q.x.i])});
+  var ranked=list.some(function(q){return /^\d+$/.test(String(q.x&&q.x.r||''))&&Number(q.x.r)>0});
+  if(ranked)list.sort(function(a,b){
+    var ar=Number(a.x.r||0),br=Number(b.x.r||0),ah=ar>0,bh=br>0;
+    if(ah&&bh&&ar!==br)return ar-br;if(ah!==bh)return ah?-1:1;
+    var av=!!a.x.m,bv=!!b.x.m;if(av!==bv)return av?-1:1;return a.o-b.o
+  });
+  return list.map(function(q){return q.x})
+};
 var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},8000);fr.style.cssText='position:fixed!important;left:-10000px!important;top:0!important;width:2px!important;height:2px!important;opacity:.01!important;pointer-events:none!important;border:0!important';fr.onload=function(){if(done)return;setTimeout(function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)},250)};fr.src=url;document.body.appendChild(fr)})};
 if(WEBSEARCH){
   collectSearchResults(document,location.href);
   if(!E.length){alert('MyMelter: Web検索結果から候補を検出できませんでした');return}
-  var WP={v:19,m:'web-search',s:location.href,n:document.title,q:(new URL(location.href)).searchParams.get('q')||'',i:[],d:[],e:E.slice(0,30),c:C.slice(0,16)};
+  var WP={v:20,m:'web-search',s:location.href,n:document.title,q:(new URL(location.href)).searchParams.get('q')||'',i:[],d:[],e:E.slice(0,30),c:C.slice(0,16),g:[]};
   var WJ=JSON.stringify(WP),WB=new TextEncoder().encode(WJ),WQ='';for(var wi=0;wi<WB.length;wi++)WQ+=String.fromCharCode(WB[wi]);
   location.href=R+'#mmimport='+encodeURIComponent(btoa(WQ));return
 }
@@ -809,6 +821,10 @@ var discoverDeepLinks=function(doc,base){
 var loadDoc=async function(url){
   try{var rr=await fetch(url,{credentials:'include',cache:'no-store'});if(rr.ok){var tx=await rr.text();return new DOMParser().parseFromString(tx,'text/html')}}catch(e){}
   return await iframeDoc(url)
+};
+var snapshotDocItems=function(doc,url){
+  if(!doc)return[];var oldI=I,oldS=S;I=[];S={};
+  try{parseAll(doc,url);return compactItems(I).slice(0,12)}finally{I=oldI;S=oldS}
 };
 var parsePage=function(doc,url){
   if(!doc)return;
@@ -837,10 +853,18 @@ var creators=0;
 while(creatorQueue.length&&creators<3&&I.length<80){
   var cu=creatorQueue.shift(),cd=await loadDoc(cu);if(cd)parsePage(cd,cu);creators++
 }
-var primary=I.slice(0,primaryEnd),deep=I.slice(primaryEnd);
-I=I.slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
+var primary=compactItems(I.slice(0,primaryEnd)),deep=compactItems(I.slice(primaryEnd));
+I=compactItems(I).slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
+var GS=[],cats=C.slice(0,12);
+for(var ci=0;ci<cats.length;ci++){
+  var cat=cats[ci],cdoc=null;
+  try{cdoc=(cat.u===location.href)?document:await loadDoc(cat.u)}catch(e){}
+  if(!cdoc)continue;
+  var catItems=snapshotDocItems(cdoc,cat.u);
+  if(catItems.length)GS.push({n:cat.n,u:cat.u,i:catItems});
+}
 if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:19,m:'site',s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30),c:C.slice(0,16)};
+var P={v:20,m:'site',s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30),c:C.slice(0,16),g:GS};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -852,7 +876,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='Safari取り込み v19。記事・画像・動画の同時抽出に加え、サイト内のカテゴリ/ランキングタブも取り込みます。動画中心チャンネルでは左右スワイプでカテゴリ移動できます。次ページ最大5ページ、広告・PR除外、Web類似検索も維持しています。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='Safari取り込み v20。ランキング順を優先し、重複サムネイルを除去します。カテゴリ/ランキングはURLだけでなく各カテゴリの動画一覧も最大12カテゴリ分まとめて取り込み、MyMelter内で即切替できます。左右スワイプ移動、次ページ最大5ページ、広告・PR除外も維持しています。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -2309,14 +2333,14 @@ function webSimilarSearchQuery(channel){
 }
 function renderWebSimilarFallback(channel,message=''){
   const text=message||'元ページ内に十分な関連リンクがありません。Web検索から候補を探せます。';
-  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv19への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
+  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv20への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
 }
 function startWebSimilarSearch(channel){
   if(!channel)return;
   const query=webSimilarSearchQuery(channel),url='https://html.duckduckgo.com/html/?q='+encodeURIComponent(query);
   state.meta.pendingWebSimilar={channelId:channel.id,query,at:Date.now()};saveState(false);
   const v=Number(state.meta.browserImportVersion||channel.relatedSitesVersion||0);
-  toast(v<19?'検索結果でv19の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
+  toast(v<20?'検索結果でv20の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
   const win=window.open(url,'_blank','noopener');if(!win)window.location.href=url;
 }
 async function runSimilarDiscovery(channel){
