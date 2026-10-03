@@ -87,7 +87,8 @@ function adLikeElement(el){
   if(!el)return false;
   const meta=((el.id||'')+' '+(el.className||'')+' '+(el.getAttribute?.('role')||'')+' '+(el.getAttribute?.('aria-label')||'')).toLowerCase();
   if(/(^|[\s_-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([\s_-]|$)/i.test(meta))return true;
-  return adLikeText((el.textContent||'').slice(0,220));
+  const text=(el.textContent||'').replace(/\s+/g,' ').trim();
+  return text.length>0&&text.length<=180&&adLikeText(text);
 }
 function contentProfile(items=[]){
   const counts={video:0,image:0,article:0};
@@ -1182,7 +1183,7 @@ function ensureArticleReaderDialog(){
   document.body.appendChild(d);
   d.querySelectorAll('[data-clean-reader-close]').forEach(b=>b.onclick=()=>d.close());
   d.querySelectorAll('[data-clean-reader-external]').forEach(b=>b.onclick=()=>{if(d._url)window.open(d._url,'_blank','noopener');});
-  d.querySelector('[data-clean-reader-save]').onclick=()=>{if(d._item)toggleSavedItem(d._item,d.querySelector('[data-clean-reader-save]'));};
+  d.querySelector('[data-clean-reader-save]').onclick=()=>{if(!d._item)return;const b=d.querySelector('[data-clean-reader-save]'),saved=toggleSavedItem(d._item);b.textContent=saved?'♥ 保存済み':'♡ 保存';};
   return d;
 }
 async function openArticleReader(item){
