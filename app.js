@@ -2016,7 +2016,7 @@ function externalSiteCandidates(doc,base,channel){
   for(const a of doc.querySelectorAll('a[href]')){
     const rawUrl=MyMelterFeatures.safeUrl(a.getAttribute('href'),base),url=normalizeSimilarSiteUrl(rawUrl),name=(a.textContent||a.getAttribute('title')||'').replace(/\s+/g,' ').trim();
     if(!url||new URL(url).origin===origin||seenDomains.has(domainOf(url))||!name||name.length>100)continue;
-    if(/\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|\?)/i.test(url))continue;
+    if(/\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|[?#])/i.test(rawUrl))continue;
     const context=(a.closest('aside,nav,footer,section,div,li')?.textContent||'').slice(0,500),rel=String(a.getAttribute('rel')||''),signals=similarCandidateSignals(name,url,context,rel);
     if(signals.generic||signals.ad||signals.adHost)continue;
     const hinted=guessTypeFromText(name+' '+context,rawUrl),type='mixed',inferred=inferGenre({name,url,type:hinted}),sameGenre=inferred===genre;
