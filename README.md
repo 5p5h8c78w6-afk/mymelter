@@ -1,4 +1,4 @@
-# MyMelter PWA 1.4.3
+# MyMelter PWA 1.4.4
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -7,6 +7,14 @@
 - GitHub Pages: 無料で利用可能（公開リポジトリ）
 - iPhone: Safari → 共有 →「ホーム画面に追加」でアプリ風に起動
 - データ: 原則この端末の `localStorage` に保存
+
+## 1.4.4 の修正
+
+- iPhone Safariで「似たサイト」候補モーダルの縦スクロールが効かない問題を修正しました。
+- 候補シートに明示的な高さ・縦スクロール領域・慣性スクロール・`touch-action: pan-y` を設定し、Safariの `<dialog>` 内でも指スワイプでスクロールできるようにしました。
+- 横はみ出し対策は維持しつつ、候補一覧側は縦方向を `visible` に戻して親シートのスクロールを妨げないようにしました。
+- 多数候補で `scrollHeight > clientHeight`、`scrollTop` が動くこと、横幅が画面内に収まることを回帰テストへ追加しました。
+- Safari取り込みv15、Webから似たサイト検索、広告・PR除外、小型サムネイル、Worker 1.3、HLS画質選択／ZIP保存は変更していません。
 
 ## 1.4.3 の追加
 
@@ -217,4 +225,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.4.3 DISCOVER`
+`MyMelter PWA 1.4.4 DISCOVER`
