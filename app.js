@@ -795,11 +795,11 @@ var compactItems=function(arr){
   });
   return list.map(function(q){return q.x})
 };
-var iframeDoc=async function(url){return await new Promise(function(resolve){var fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},8000);fr.style.cssText='position:fixed!important;left:-10000px!important;top:0!important;width:2px!important;height:2px!important;opacity:.01!important;pointer-events:none!important;border:0!important';fr.onload=function(){if(done)return;setTimeout(function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)},250)};fr.src=url;document.body.appendChild(fr)})};
+var iframeDoc=async function(url,settle){return await new Promise(function(resolve){var wait=Number(settle)||250,fr=document.createElement('iframe'),done=false,t=setTimeout(function(){if(!done){done=true;try{fr.remove()}catch(e){}resolve(null)}},9000);fr.style.cssText='position:fixed!important;left:-10000px!important;top:0!important;width:2px!important;height:2px!important;opacity:.01!important;pointer-events:none!important;border:0!important';fr.onload=function(){if(done)return;setTimeout(function(){if(done)return;done=true;clearTimeout(t);var d=null;try{d=fr.contentDocument}catch(e){};try{fr.remove()}catch(e){}resolve(d)},wait)};fr.src=url;document.body.appendChild(fr)})};
 if(WEBSEARCH){
   collectSearchResults(document,location.href);
   if(!E.length){alert('MyMelter: Web検索結果から候補を検出できませんでした');return}
-  var WP={v:20,m:'web-search',s:location.href,n:document.title,q:(new URL(location.href)).searchParams.get('q')||'',i:[],d:[],e:E.slice(0,30),c:C.slice(0,16),g:[]};
+  var WP={v:21,m:'web-search',s:location.href,n:document.title,q:(new URL(location.href)).searchParams.get('q')||'',i:[],d:[],e:E.slice(0,30),c:C.slice(0,16),g:[]};
   var WJ=JSON.stringify(WP),WB=new TextEncoder().encode(WJ),WQ='';for(var wi=0;wi<WB.length;wi++)WQ+=String.fromCharCode(WB[wi]);
   location.href=R+'#mmimport='+encodeURIComponent(btoa(WQ));return
 }
@@ -859,16 +859,26 @@ while(creatorQueue.length&&creators<3&&I.length<80){
 }
 var primary=compactItems(I.slice(0,primaryEnd)),deep=compactItems(I.slice(primaryEnd));
 I=compactItems(I).slice(0,80);primary=primary.slice(0,20);deep=deep.slice(0,60);
-var GS=[],cats=C.slice(0,12);
+var GS=[],cats=C.slice(0,10);
 for(var ci=0;ci<cats.length;ci++){
   var cat=cats[ci],cdoc=null;
   try{cdoc=(cat.u===location.href)?document:await loadDoc(cat.u)}catch(e){}
   if(!cdoc)continue;
-  var catItems=snapshotDocItems(cdoc,cat.u);
-  if(catItems.length)GS.push({n:cat.n,u:cat.u,i:catItems});
+  var catItems=snapshotDocItems(cdoc,cat.u),videoCount=catItems.filter(function(x){return !!x.m}).length;
+  var videoish=/動画|video|movie|ranking|rank|realtime|保存|閲覧数|ダウンロード数|いいね/i.test((cat.n||'')+' '+(cat.u||''));
+  if(videoish&&videoCount===0&&cat.u!==location.href){
+    try{
+      var liveDoc=await iframeDoc(cat.u,850);
+      if(liveDoc){
+        var liveItems=snapshotDocItems(liveDoc,cat.u),liveVideos=liveItems.filter(function(x){return !!x.m}).length;
+        if(liveVideos>videoCount)catItems=liveItems;
+      }
+    }catch(e){}
+  }
+  if(catItems.length)GS.push({n:cat.n,u:cat.u,i:compactItems(catItems).slice(0,16)});
 }
 if(!primary.length&&!deep.length){alert('MyMelter: 取り込める候補を検出できませんでした');return}
-var P={v:20,m:'site',s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30),c:C.slice(0,16),g:GS};
+var P={v:21,m:'site',s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30),c:C.slice(0,16),g:GS};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -880,7 +890,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='Safari取り込み v20。ランキング順を優先し、重複サムネイルを除去します。カテゴリ/ランキングはURLだけでなく各カテゴリの動画一覧も最大12カテゴリ分まとめて取り込み、MyMelter内で即切替できます。左右スワイプ移動、次ページ最大5ページ、広告・PR除外も維持しています。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='Safari取り込み v21。ランキング動画を一覧へ統合し、静止サムネだけの重複を除去します。カテゴリ事前取得で動画が0件ならJavaScript実行後の実DOMを再確認し、画像だけの誤取り込みを避けます。最大10カテゴリを事前取得し、MyMelter内で即切替できます。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -969,7 +979,7 @@ function consumeBrowserImportHash(){
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); state.meta.browserImportVersion=Math.max(Number(state.meta.browserImportVersion||0),Number(payload?.v||0)); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / カテゴリ '+(channel.categoryTabs?.length||0)+'件（事前取得 '+Object.keys(channel.categorySnapshots||{}).length+'件） / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<20?'（取込コードv20へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / カテゴリ '+(channel.categoryTabs?.length||0)+'件（事前取得 '+Object.keys(channel.categorySnapshots||{}).length+'件） / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<21?'（取込コードv21へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -2412,14 +2422,14 @@ function webSimilarSearchQuery(channel){
 }
 function renderWebSimilarFallback(channel,message=''){
   const text=message||'元ページ内に十分な関連リンクがありません。Web検索から候補を探せます。';
-  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv20への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
+  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv21への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
 }
 function startWebSimilarSearch(channel){
   if(!channel)return;
   const query=webSimilarSearchQuery(channel),url='https://html.duckduckgo.com/html/?q='+encodeURIComponent(query);
   state.meta.pendingWebSimilar={channelId:channel.id,query,at:Date.now()};saveState(false);
   const v=Number(state.meta.browserImportVersion||channel.relatedSitesVersion||0);
-  toast(v<20?'検索結果でv20の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
+  toast(v<21?'検索結果でv21の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
   const win=window.open(url,'_blank','noopener');if(!win)window.location.href=url;
 }
 async function runSimilarDiscovery(channel){
