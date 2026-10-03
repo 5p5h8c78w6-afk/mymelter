@@ -383,3 +383,43 @@ main,.view,.channel-list{max-width:100%;min-width:0}
   .discover-result .result-actions{justify-content:flex-end}
   .discover-result .result-actions button{padding-left:12px;padding-right:12px}
 }
+
+
+/* MyMelter 1.4.4 — iPhone discovery scrolling */
+#discoverDialog{
+  max-height:100dvh;
+  overflow:hidden;
+}
+#discoverDialog .sheet{
+  width:100%;
+  height:min(88dvh,760px);
+  max-height:min(88dvh,760px);
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+  touch-action:pan-y;
+  min-height:0;
+}
+#discoverDialog .discover-results{
+  overflow-x:hidden;
+  overflow-y:visible;
+  touch-action:pan-y;
+}
+#discoverDialog .discover-result,
+#discoverDialog .result-copy,
+#discoverDialog .result-actions{
+  touch-action:pan-y;
+}
+@media(max-width:600px){
+  #discoverDialog{
+    width:100%;
+    max-width:100%;
+    margin:auto 0 0;
+  }
+  #discoverDialog .sheet{
+    height:88dvh;
+    max-height:88dvh;
+    padding-bottom:calc(28px + var(--safe-bottom));
+  }
+}
