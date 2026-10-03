@@ -617,11 +617,14 @@ async function loadVideoCategory(index){
   const current=currentVideoCategoryIndex(activeChannel);if(Number(index)===current&&activeItems.length)return;
   const root=$('#readerContent');if(root)root.innerHTML=videoCategoryStripHTML(activeChannel)+'<div class="reader-loading">カテゴリを読み込んでいます…</div>';
   const cache=activeChannel.categorySnapshots&&typeof activeChannel.categorySnapshots==='object'?activeChannel.categorySnapshots:{};
-  const cached=prioritizeImportedItems(cache[normalizeUrl(tab.url)]||cache[tab.url]||[]);
+  const expectsVideo=/動画|video|movie|ranking|rank|realtime|保存|閲覧数|ダウンロード数|いいね/i.test((tab.name||'')+' '+(tab.url||''))||activeChannel.contentMode==='video';
+  let cached=prioritizeImportedItems(cache[normalizeUrl(tab.url)]||cache[tab.url]||[]);
+  if(expectsVideo&&!cached.some(x=>mediaKind(x)==='video'&&x.videoUrl))cached=[];
   try{
     let items=cached;
     if(!items.length){
       const text=await fetchText(tab.url),loaded=await loadPaginatedChannelItems(activeChannel,text,tab.url,3);items=prioritizeImportedItems(loaded.items);
+      if(expectsVideo&&!items.some(x=>mediaKind(x)==='video'&&x.videoUrl))items=[];
       if(items.length){activeChannel.categorySnapshots={...cache,[normalizeUrl(tab.url)]:items};saveState(false);}
     }
     if(!items.length)throw new Error('カテゴリ項目なし');
