@@ -1,4 +1,4 @@
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.6.2';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -941,6 +941,7 @@ function addAllCandidates(){
 
 function applyReaderProfile(channel,items=[]){
   const p=contentProfile(items);channel.contentMode=p.mode;
+  document.querySelector('.reader-screen')?.classList.toggle('video-first',p.mode==='video');
   const tabs=Array.from(document.querySelectorAll('#readerModeTabs button'));
   const list=tabs.find(b=>b.dataset.readerMode==='list'),media=tabs.find(b=>b.dataset.readerMode==='media'),video=tabs.find(b=>b.dataset.readerMode==='video');
   if(list)list.textContent=p.mode==='article'?'記事':'一覧';
@@ -984,14 +985,23 @@ function renderReader(){
   const root=$('#readerContent'); if(!activeItems.length){root.innerHTML=`<div class="empty-card">表示できる項目がありません。</div>`;return;}
   if(activeReaderMode==='video'){
     const vids=activeVideoItems();
-    const primaryCount=activeItems.filter(x=>x?.videoUrl).length, deepCount=Math.max(0,vids.length-primaryCount);
-    root.innerHTML=vids.length?`<div class="empty-card"><strong>${vids.length}件の動画があります。</strong><br>${deepCount?`ランキング一覧 ${primaryCount}件 + 深掘り ${deepCount}件。<br>`:''}上スワイプだけで、取得済みの深掘り動画まで止まらず続けて再生できます。<br><br><button class="primary" id="launchVideoFeedBtn">深掘りスワイプ再生</button></div>`:`<div class="empty-card">この一覧から直接再生できる動画URLは見つかりませんでした。</div>`; return;
+    root.innerHTML=vids.length?`<div class="video-gallery">${vids.map((x,i)=>videoGalleryItemHTML(x,i)).join('')}</div>`:`<div class="empty-card">この一覧から直接再生できる動画URLは見つかりませんでした。</div>`; return;
   }
   if(activeReaderMode==='media'){
     const media=activeItems.filter(x=>x.image||x.videoUrl);
     root.innerHTML=media.length?`<div class="media-grid">${media.map((x,i)=>gridItemHTML(x,activeItems.indexOf(x))).join('')}</div>`:`<div class="empty-card">画像・動画を検出できませんでした。</div>`;return;
   }
   root.innerHTML=`<div class="content-list">${activeItems.map((x,i)=>contentItemHTML(x,i)).join('')}</div>`;
+}
+function videoGalleryItemHTML(x,i){
+  const poster=x.image?'<img '+imageSourceAttrs(x.image)+' alt="" loading="lazy" referrerpolicy="no-referrer">':'<div class="video-gallery-fallback">▶</div>';
+  const saved=isSavedUrl(x.url);
+  return `<article class="video-gallery-card">
+    <button type="button" class="video-gallery-open" data-video-gallery-open="${i}" aria-label="${esc(x.title||'動画')}">
+      ${poster}<span class="video-gallery-play">▶</span>
+    </button>
+    <div class="video-gallery-meta"><strong>${esc(x.title||'動画')}</strong><button type="button" class="video-gallery-save" data-video-gallery-save="${i}" aria-label="保存">${saved?'♥':'♡'}</button></div>
+  </article>`;
 }
 function contentItemHTML(x,i){
   const th=x.image?`<img class="content-thumb" ${imageSourceAttrs(x.image)} alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="content-placeholder">${esc(typeGlyph(mediaKind(x)))}</span>`;
@@ -1961,6 +1971,8 @@ document.addEventListener('click',async e=>{
   const addC=e.target.closest('[data-add-candidate]'); if(addC){addCandidate(addC.dataset.addCandidate);return;}
   const addAll=e.target.closest('[data-add-all-candidates]'); if(addAll){addAllCandidates();return;}
   const prevC=e.target.closest('[data-preview-candidate]'); if(prevC){const c=state.candidates.find(x=>x.id===prevC.dataset.previewCandidate);if(c)openChannel(normalizeChannel(c));return;}
+  const galleryOpen=e.target.closest('[data-video-gallery-open]'); if(galleryOpen){const vids=activeVideoItems();const i=Number(galleryOpen.dataset.videoGalleryOpen);if(vids[i]){recordHistory(vids[i],false);openVideoFeedItems(vids,activeChannel?.name||'動画',i);}return;}
+  const gallerySave=e.target.closest('[data-video-gallery-save]'); if(gallerySave){const vids=activeVideoItems();const i=Number(gallerySave.dataset.videoGallerySave);if(vids[i]){const saved=toggleSavedItem(vids[i]);gallerySave.textContent=saved?'♥':'♡';}return;}
   const activeOpen=e.target.closest('[data-active-open]'); if(activeOpen){openActiveItem(Number(activeOpen.dataset.activeOpen));return;}
   const activeSave=e.target.closest('[data-active-save]'); if(activeSave){toggleSavedItem(activeItems[Number(activeSave.dataset.activeSave)],activeSave);return;}
   const activeQuick=e.target.closest('[data-active-quick-save]'); if(activeQuick){await prepareDeviceSave(activeItems[Number(activeQuick.dataset.activeQuickSave)]);return;}
