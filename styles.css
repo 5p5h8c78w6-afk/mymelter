@@ -472,3 +472,9 @@ main,.view,.channel-list{max-width:100%;min-width:0}
 .channel-origin-row{margin:12px 0 14px}
 .channel-origin-btn{width:100%;min-height:48px;font-weight:800}
 .channel-origin-btn:disabled{opacity:.45}
+
+
+/* MyMelter 1.6.1 — article comments */
+.clean-reader-comments-heading{margin-top:34px!important;padding-top:22px;border-top:2px solid var(--line)}
+.clean-reader-comment{margin:10px 0;padding:12px 14px;border:1px solid #e2e9f3;border-radius:14px;background:#f7f9fc;color:#25364b;font-size:15px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.clean-reader-comment + .clean-reader-comment{margin-top:8px}
