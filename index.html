@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://pbs.twimg.com" crossorigin />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icons/icon-180.png" />
-  <link rel="stylesheet" href="./styles.css?v=1.3.9" />
+  <link rel="stylesheet" href="./styles.css?v=1.4.0" />
   <script>
     window.MyMelterInlineWorkerTest = async function(ev){
       try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){}
@@ -135,7 +135,7 @@
       </div>
       <div class="toolbar-card">
         <input id="channelFilter" type="search" placeholder="チャンネルを絞り込み" />
-        <select id="channelTypeFilter">
+        <div id="channelGenreFilters" class="genre-filters" aria-label="ジャンル絞り込み"></div><select id="channelTypeFilter">
           <option value="all">すべて</option>
           <option value="video">動画</option>
           <option value="image">画像</option>
@@ -232,7 +232,7 @@
 
       <div class="settings-group">
         <h3>このアプリ</h3>
-        <p class="help">MyMelter PWA 1.3.9 DISCOVER<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
+        <p class="help">MyMelter PWA 1.4.0<br>App Store不要 / Apple Developer年会費不要 / GitHub Pages対応</p>
       </div>
     </section>
   </main>
@@ -291,7 +291,7 @@
       <div class="sheet-head"><div><p class="eyebrow">CHANNEL EDITOR</p><h2 id="channelDialogTitle">チャンネル追加</h2></div><button id="channelCloseBtn" type="button" class="round-btn">×</button></div>
       <input id="channelId" type="hidden" />
       <div class="form-grid">
-        <label class="field"><span>名前</span><input id="channelName" required placeholder="例：新着動画" /></label>
+        <label class="field"><span>ジャンル</span><select id="channelGenre"></select></label><label class="field"><span>名前</span><input id="channelName" required placeholder="例：新着動画" /></label>
         <label class="field"><span>URL</span><input id="channelUrl" type="url" required placeholder="https://example.com/videos" /></label>
         <label class="field"><span>種類</span>
           <select id="channelType">
@@ -381,6 +381,6 @@
     </div>
   </dialog>
 
-  <script src="./app.js?v=1.3.9"></script>
+  <script src="./vendor/hls-1.6.13.min.js"></script><script src="./features.js?v=1.4.0"></script><script src="./app.js?v=1.4.0"></script>
 </body>
 </html>

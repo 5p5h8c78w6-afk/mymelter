@@ -355,3 +355,7 @@ main,.view,.channel-list{max-width:100%;min-width:0}
 .video-save-gate::backdrop{background:rgba(7,18,34,.42)}
 .video-save-gate [data-video-save-start]:disabled{opacity:.45;cursor:not-allowed}
 .video-save-gate .sheet-lead{min-height:44px;display:flex;align-items:center}
+
+.genre-filters{display:flex;gap:8px;overflow-x:auto;grid-column:1/-1;max-width:100%;padding:6px 0}.genre-filters button{flex-shrink:0}.genre-badge{display:inline-block;border-radius:12px;padding:2px 9px;margin:3px;background:#e2edff;color:#16467c;font-size:12px;font-weight:700}.genre-badge[data-genre="動画"]{background:#ffe3e7;color:#922437}.genre-badge[data-genre="画像"]{background:#d9f6e8;color:#17603e}.manager-actions{flex-wrap:wrap}.quality-select{width:100%;padding:12px;font-size:16px}
+@media(max-width:600px){.manager-card{grid-template-columns:52px minmax(0,1fr);gap:12px}.manager-actions{grid-column:1/-1;display:flex;gap:8px}.manager-actions .icon-action{white-space:nowrap;flex:1;min-width:0}.manager-actions .icon-action[data-similar-channel]{flex:2}.manager-main{min-width:0}.manager-main small{overflow-wrap:anywhere}}
+@media(max-width:600px){.manager-actions{display:flex!important}}
