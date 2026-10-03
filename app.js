@@ -1234,6 +1234,48 @@ function articleBlocksHTML(article){
     return `<p>${esc(b.text)}</p>`;
   }).join('');
 }
+function articleContinuationUrl(text,currentUrl){
+  const doc=new DOMParser().parseFromString(text,'text/html'),current=normalizeUrl(currentUrl);if(!current)return '';
+  const base=new URL(current),links=[...doc.querySelectorAll('a[href]')],scored=[];
+  for(const a of links){
+    const href=absoluteUrl(a.getAttribute('href')||'',current);if(!href||href===current)continue;
+    let u;try{u=new URL(href);}catch{continue;}if(u.origin!==base.origin)continue;
+    const label=((a.textContent||'')+' '+(a.getAttribute('aria-label')||'')+' '+(a.getAttribute('title')||'')).replace(/\s+/g,' ').trim();
+    const rel=String(a.getAttribute('rel')||''),cls=((a.className||'')+' '+(a.parentElement?.className||'')).toLowerCase();
+    const strong=/続きを読む|続き(?:を読む)?|次のページ|次ページ|次へ|next\s*page|more/i.test(label);
+    const fraction=/\b[2-9]\s*\/\s*\d+\b/.test(label);
+    const pageish=/([?&](page|p|pg)=\d+)|\/page\/\d+|[-_](\d+)\.(?:html?|php)$/i.test(u.href);
+    const pager=/pager|pagination|page-nav|next/i.test(cls);
+    let score=0;if(strong)score+=10;if(fraction)score+=9;if(pager)score+=4;if(pageish)score+=4;if(/\bnext\b/i.test(rel))score+=2;
+    if(score<8)continue;
+    scored.push({href:u.href,score});
+  }
+  scored.sort((a,b)=>b.score-a.score);return scored[0]?.href||'';
+}
+function mergeReadableArticles(parts=[]){
+  const blocks=[],seen=new Set();let title='',pages=0;
+  for(const p of parts){if(!p)continue;pages++;if(!title&&p.title)title=p.title;
+    for(const b of p.blocks||[]){
+      const key=b.kind==='image'?('i:'+b.src):('t:'+b.kind+':'+b.text);
+      if(!key||seen.has(key))continue;seen.add(key);blocks.push(b);if(blocks.length>=400)break;
+    }
+    if(blocks.length>=400)break;
+  }
+  const textLength=blocks.filter(x=>x.text).reduce((n,x)=>n+x.text.length,0);
+  return {title,blocks,textLength,pages};
+}
+async function loadReadableArticlePages(item,maxPages=5){
+  let url=normalizeUrl(item?.url||''),pages=[],seen=new Set(),lastText='';
+  while(url&&pages.length<Math.max(1,maxPages)&&!seen.has(url)){
+    seen.add(url);
+    const text=await fetchText(url);lastText=text;
+    pages.push(extractReadableArticle(text,url,pages.length?'':(item?.title||'')));
+    const next=articleContinuationUrl(text,url);
+    if(!next||seen.has(next))break;
+    url=next;
+  }
+  return mergeReadableArticles(pages);
+}
 function ensureArticleReaderDialog(){
   let d=$('#articleReaderDialog');if(d)return d;
   d=document.createElement('dialog');d.id='articleReaderDialog';d.className='fullscreen-dialog article-reader-dialog';
@@ -1254,8 +1296,9 @@ async function openArticleReader(item){
   const save=d.querySelector('[data-clean-reader-save]');save.textContent=isSavedUrl(item.url)?'♥ 保存済み':'♡ 保存';
   if(!d.open)d.showModal();
   try{
-    const text=await fetchText(item.url),article=extractReadableArticle(text,item.url,item.title);
+    const article=await loadReadableArticlePages(item,5);
     if(d._url!==item.url)return;
+    d.querySelector('[data-clean-reader-domain]').textContent=domainOf(item.url)+(article.pages>1?' · '+article.pages+'ページ結合':'');
     d.querySelector('[data-clean-reader-title]').textContent=article.title||item.title||'記事';
     body.innerHTML=article.textLength>=80?articleBlocksHTML(article):'<div class="empty-card">本文を十分に抽出できませんでした。右上または「元ページ」からSafariで開けます。</div>';
   }catch(e){
