@@ -520,7 +520,7 @@ var collectRelated=function(doc,base){
     if(!u||!n||!/^https?:$/.test(p.protocol)||p.origin===origin||p.username||p.password||ES[p.hostname])return;
     var host=p.hostname.toLowerCase(),parent=a.closest('aside,nav,footer,section,div,li')||a.parentElement,context=X(parent).slice(0,360),rel=String(a.getAttribute('rel')||''),sig=(n+' '+u+' '+context+' '+rel).toLowerCase();
     var generic=/^(保存|開く|詳細|こちら|もっと見る|続きを読む|今すぐ|無料|登録|入会|ダウンロード|download|open|more)$/i.test(n);
-    var ad=/【?pr】?|広告|スポンサー|sponsored|アフィリエイト|affiliate|アダルトチャット|チャット広告|キャンペーン|promoted|promotion/i.test(sig);
+    var ad=/(?:【PR】|\[PR\]|(^|\\s)PR(?:\\s|$)|広告|スポンサー|sponsored|アフィリエイト|affiliate|アダルトチャット|チャット広告|キャンペーン|promoted|promotion)/i.test(sig);
     var adhost=/(^|\\.)(doubleclick\\.net|googlesyndication\\.com|adservice\\.google\\.com|adnxs\\.com|taboola\\.com|outbrain\\.com|criteo\\.com|exoclick\\.com|trafficjunky\\.com|popads\\.net|propellerads\\.com|adsterra\\.com)$/i.test(host);
     if(generic||ad||adhost||/(^|\\.)((x|twitter)\\.com|t\\.co|video\\.twimg\\.com|pbs\\.twimg\\.com)$/i.test(host))return;
     if(/\\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|[?#])/i.test(u)||/login|sign.?up|share|facebook\\.com\\/sharer|twitter\\.com\\/intent|x\\.com\\/intent/i.test(sig))return;
@@ -1776,7 +1776,7 @@ if(importedBrowserChannel){setTimeout(()=>openChannel(importedBrowserChannel),0)
 function similarCandidateSignals(name='',url='',context='',rel=''){
   const text=`${name} ${url} ${context} ${rel}`,label=String(name||'').trim(),host=domainOf(url).toLowerCase();
   const generic=/^(保存|開く|詳細|こちら|もっと見る|続きを読む|今すぐ|無料|登録|入会|ダウンロード|download|open|more)$/i.test(label);
-  const ad=/【?pr】?|広告|スポンサー|sponsored|アフィリエイト|affiliate|アダルトチャット|チャット広告|キャンペーン|promoted|promotion/i.test(text);
+  const ad=/(?:【PR】|\[PR\]|(^|\s)PR(?:\s|$)|広告|スポンサー|sponsored|アフィリエイト|affiliate|アダルトチャット|チャット広告|キャンペーン|promoted|promotion)/i.test(text);
   const adHost=/(^|\.)(doubleclick\.net|googlesyndication\.com|adservice\.google\.com|adnxs\.com|taboola\.com|outbrain\.com|criteo\.com|exoclick\.com|trafficjunky\.com|popads\.net|propellerads\.com|adsterra\.com)$/i.test(host);
   const relation=/関連|おすすめ|姉妹|相互|リンク集|友達|related|recommend|partner|similar/i.test(`${context} ${rel}`);
   return {generic,ad,adHost,relation};
