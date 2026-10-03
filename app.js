@@ -1,4 +1,4 @@
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.6.1';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -1183,6 +1183,42 @@ function openActiveItem(index){
   openItem(item);
 }
 
+function isCommentLikeText(text=''){
+  const s=String(text||'').replace(/\s+/g,' ').trim();
+  return /^(?:\d{1,6}\s*[:：]|>>?\d+|No\.?\s*\d+|(?:名無しさん|名無し|匿名).{0,40}(?:ID:|[:：]))/i.test(s)||/\bID:[A-Za-z0-9+\/_\-.]{3,}/.test(s);
+}
+function readableLinesFromNode(node){
+  if(!node)return [];
+  const clone=node.cloneNode(true);
+  clone.querySelectorAll('script,style,noscript,iframe,form,nav,footer,header,aside').forEach(x=>x.remove());
+  [...clone.querySelectorAll('*')].filter(adLikeElement).forEach(x=>x.remove());
+  clone.querySelectorAll('br').forEach(br=>br.replaceWith(document.createTextNode('\n')));
+  clone.querySelectorAll('p,div,section,article,li,blockquote,pre,h1,h2,h3,h4,td').forEach(el=>el.appendChild(document.createTextNode('\n')));
+  return (clone.textContent||'').split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
+}
+function extractCommentBlocks(doc,root,seenText=new Set()){
+  const blocks=[],seen=new Set(seenText);
+  const skip=s=>!s||s.length<2||s.length>3000||seen.has(s)||adLikeText(s)||/^(コメントする|コメントを書く|コメントを投稿|名前|メール|URL|送信|返信|キャンセル)$/i.test(s);
+  const add=(text,force=false)=>{
+    const s=String(text||'').replace(/\s+/g,' ').trim();
+    if(skip(s)||(!force&&!isCommentLikeText(s)))return;
+    seen.add(s);blocks.push({kind:'comment',text:s.slice(0,3000)});
+  };
+  const items=[...doc.querySelectorAll('#comments .comment,#comments li,.comments .comment,.comments li,.comment-list > li,.commentlist > li,.comment-item,.comment-body,.comment-content,.comment-thread .reply,.reply-list .reply,[data-comment-id]')];
+  for(const el of items){if(adLikeElement(el)||el.closest('form'))continue;add(el.textContent||'',true);if(blocks.length>=250)break;}
+  if(blocks.length<2){
+    const roots=[...doc.querySelectorAll('#comments,.comments,.comment-list,.commentlist,.comment-area,.comment-thread,.reply-list,[data-comments],[id*="comment-list"],[class*="comment-list"],[class*="comment-thread"]')];
+    for(const r of roots){
+      if(adLikeElement(r))continue;
+      for(const line of readableLinesFromNode(r)){add(line,true);if(blocks.length>=250)break;}
+      if(blocks.length>=250)break;
+    }
+  }
+  if(root){
+    for(const line of readableLinesFromNode(root)){if(isCommentLikeText(line))add(line,true);if(blocks.length>=250)break;}
+  }
+  return blocks;
+}
 function extractReadableArticle(text,url,hintTitle=''){
   const doc=new DOMParser().parseFromString(text,'text/html');
   const title=(doc.querySelector('meta[property="og:title"]')?.content||doc.querySelector('h1')?.textContent||hintTitle||doc.title||domainOf(url)).replace(/\s+/g,' ').trim().slice(0,300);
@@ -1203,7 +1239,8 @@ function extractReadableArticle(text,url,hintTitle=''){
     const value=(el.textContent||'').replace(/\s+/g,' ').trim();if(value.length<2||adLikeText(value)||seenText.has(value))continue;
     if(/cookie|プライバシーポリシー|利用規約|シェアする|フォローする/i.test(value)&&value.length<120)continue;
     seenText.add(value);
-    blocks.push({kind:/^H[1-3]$/.test(el.tagName)?'heading':el.tagName==='BLOCKQUOTE'?'quote':'text',text:value.slice(0,3000)});
+    const kind=isCommentLikeText(value)?'comment':/^H[1-3]$/.test(el.tagName)?'heading':el.tagName==='BLOCKQUOTE'?'quote':'text';
+    blocks.push({kind,text:value.slice(0,3000)});
     if(blocks.length>=220)break;
   }
   let textLength=blocks.filter(x=>x.text).reduce((n,x)=>n+x.text.length,0);
@@ -1219,16 +1256,24 @@ function extractReadableArticle(text,url,hintTitle=''){
       if(line.length<2||seen.has(line)||adLikeText(line))continue;
       if(/^(人気記事|関連記事|おすすめ記事|コメント|コメントする|カテゴリー|カテゴリ|トップへ|ホーム)$/i.test(line))continue;
       if(/cookie|プライバシーポリシー|利用規約|シェアする|フォローする/i.test(line)&&line.length<120)continue;
-      seen.add(line);clean.push({kind:'text',text:line.slice(0,3000)});if(clean.length>=220)break;
+      seen.add(line);clean.push({kind:isCommentLikeText(line)?'comment':'text',text:line.slice(0,3000)});if(clean.length>=220)break;
     }
     blocks.length=0;blocks.push(...clean,...keepImages);
     textLength=clean.reduce((n,x)=>n+x.text.length,0);
   }
-  return {title,blocks,textLength};
+  const commentBlocks=extractCommentBlocks(doc,root,new Set(blocks.filter(x=>x.text).map(x=>x.text)));
+  if(commentBlocks.length){
+    blocks.push({kind:'comments-heading',text:'コメント'});
+    blocks.push(...commentBlocks);
+    textLength+=commentBlocks.reduce((n,x)=>n+(x.text?.length||0),0);
+  }
+  return {title,blocks,textLength,commentCount:commentBlocks.length};
 }
 function articleBlocksHTML(article){
   return article.blocks.map(b=>{
     if(b.kind==='image')return `<figure class="clean-reader-image"><img ${imageSourceAttrs(b.src)} alt="${esc(b.alt||'')}" loading="lazy" referrerpolicy="no-referrer"></figure>`;
+    if(b.kind==='comments-heading')return `<h2 class="clean-reader-comments-heading">${esc(b.text)}</h2>`;
+    if(b.kind==='comment')return `<div class="clean-reader-comment">${esc(b.text)}</div>`;
     if(b.kind==='heading')return `<h2>${esc(b.text)}</h2>`;
     if(b.kind==='quote')return `<blockquote>${esc(b.text)}</blockquote>`;
     return `<p>${esc(b.text)}</p>`;
@@ -1262,7 +1307,8 @@ function mergeReadableArticles(parts=[]){
     if(blocks.length>=400)break;
   }
   const textLength=blocks.filter(x=>x.text).reduce((n,x)=>n+x.text.length,0);
-  return {title,blocks,textLength,pages};
+  const commentCount=blocks.filter(x=>x.kind==='comment').length;
+  return {title,blocks,textLength,pages,commentCount};
 }
 async function loadReadableArticlePages(item,maxPages=5){
   let url=normalizeUrl(item?.url||''),pages=[],seen=new Set(),lastText='';
@@ -1298,7 +1344,7 @@ async function openArticleReader(item){
   try{
     const article=await loadReadableArticlePages(item,5);
     if(d._url!==item.url)return;
-    d.querySelector('[data-clean-reader-domain]').textContent=domainOf(item.url)+(article.pages>1?' · '+article.pages+'ページ結合':'');
+    d.querySelector('[data-clean-reader-domain]').textContent=domainOf(item.url)+(article.pages>1?' · '+article.pages+'ページ結合':'')+(article.commentCount?' · コメント'+article.commentCount+'件':'');
     d.querySelector('[data-clean-reader-title]').textContent=article.title||item.title||'記事';
     body.innerHTML=article.textLength>=80?articleBlocksHTML(article):'<div class="empty-card">本文を十分に抽出できませんでした。右上または「元ページ」からSafariで開けます。</div>';
   }catch(e){
