@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.4';
+const APP_VERSION = '1.5.0';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -76,7 +76,36 @@ function fmtDate(ts){ if(!ts) return ''; try { return new Intl.DateTimeFormat('j
 function typeLabel(type){ return ({video:'動画',image:'画像',article:'記事',feed:'RSS/Atom',mixed:'混在'})[type] || '混在'; }
 function typeGlyph(type){ return ({video:'▶',image:'▧',article:'≡',feed:'◎',mixed:'◇'})[type] || '◇'; }
 function colorForType(type){ return ({video:'red',image:'green',article:'purple',feed:'blue',mixed:'gold'})[type] || 'blue'; }
-function mediaKind(item){ if(item.videoUrl) return 'video'; if(item.image) return 'image'; return item.type || 'article'; }
+function mediaKind(item){
+  if(item?.videoUrl)return 'video';
+  if(item?.type==='article'||item?.type==='feed')return 'article';
+  if(item?.image)return 'image';
+  return item?.type&&item.type!=='mixed'?item.type:'article';
+}
+function adLikeText(text=''){return /(?:【PR】|\[PR\]|(^|\s)PR(?:\s|$)|広告|スポンサー|sponsored|advertisement|affiliate|アフィリエイト|promoted|promotion|amazonで|楽天で|詳しくはこちら)/i.test(String(text||''));}
+function adLikeElement(el){
+  if(!el)return false;
+  const meta=((el.id||'')+' '+(el.className||'')+' '+(el.getAttribute?.('role')||'')+' '+(el.getAttribute?.('aria-label')||'')).toLowerCase();
+  if(/(^|[\s_-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([\s_-]|$)/i.test(meta))return true;
+  return adLikeText((el.textContent||'').slice(0,220));
+}
+function contentProfile(items=[]){
+  const counts={video:0,image:0,article:0};
+  for(const x of items){const k=mediaKind(x);if(counts[k]!=null)counts[k]++;}
+  const total=counts.video+counts.image+counts.article||1;
+  let mode='mixed';if(counts.video/total>=.55)mode='video';else if(counts.image/total>=.55)mode='image';else if(counts.article/total>=.55)mode='article';
+  return {mode,counts,total};
+}
+function preferredReaderMode(items=[]){const p=contentProfile(items);return p.mode==='video'?'video':p.mode==='image'?'media':'list';}
+function normalizeSimilarSiteUrl(raw=''){
+  const url=normalizeUrl(raw);if(!url)return '';
+  try{
+    const u=new URL(url),h=u.hostname.toLowerCase();
+    if(/(^|\.)(x\.com|twitter\.com|t\.co|facebook\.com|instagram\.com|tiktok\.com|threads\.net|note\.com)$/i.test(h))return '';
+    if(/(^|\.)(search\.yahoo\.co\.jp|yahoo\.co\.jp|yandex\.(com|ru|co\.jp)|google\.[a-z.]+|bing\.com|duckduckgo\.com)$/i.test(h))return '';
+    u.pathname='/';u.search='';u.hash='';return u.href;
+  }catch{return '';}
+}
 function uniqueBy(arr, keyFn){ const seen=new Set(); return arr.filter(x=>{const k=keyFn(x); if(!k||seen.has(k)) return false; seen.add(k); return true;}); }
 function isMediaUrl(url=''){ return /\.(mp4|m4v|mov|webm|m3u8)(?:$|[?#])/i.test(url); }
 function isImageUrl(url=''){ return /\.(jpe?g|png|gif|webp|avif)(?:$|[?#])/i.test(url); }
@@ -472,24 +501,28 @@ function parseSitemap(xml,channel){
 }
 function genericNodes(doc){
   const candidates=['article','main .post','main .item','main .card','main li','.post','.entry','.item','.card'];
-  for(const sel of candidates){let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{} nodes=nodes.filter(n=>n.querySelector('a[href]')&&(n.textContent||'').trim().length>3); if(nodes.length>=2) return nodes.slice(0,160);}
-  return [...doc.querySelectorAll('a[href]')].filter(a=>(a.textContent||'').trim().length>3).slice(0,160);
+  for(const sel of candidates){let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{} nodes=nodes.filter(n=>!adLikeElement(n)&&n.querySelector('a[href]')&&(n.textContent||'').trim().length>3); if(nodes.length>=2) return nodes.slice(0,160);}
+  return [...doc.querySelectorAll('a[href]')].filter(a=>!adLikeElement(a.closest('li,article,div,section')||a)&&(a.textContent||'').trim().length>3).slice(0,160);
 }
 function parseHtml(text,channel,baseUrl){
   const doc=new DOMParser().parseFromString(text,'text/html'); let nodes=[];
   if(channel.selectors?.item){ try{nodes=[...doc.querySelectorAll(channel.selectors.item)];}catch{} }
   if(!nodes.length) nodes=genericNodes(doc);
-  const items=nodes.map((node,idx)=>{
+  const items=nodes.filter(node=>!adLikeElement(node)).map((node,idx)=>{
     let title=selectorValue(node,channel.selectors?.title,'title')||nodeText(node,['h1','h2','h3','h4','.title','a[title]'])||(node.matches?.('a')?node.textContent.trim():'')||`Item ${idx+1}`;
     let link=selectorValue(node,channel.selectors?.link,'link')||attrFrom(node,['a[href]'],['href'])||(node.matches?.('a')?node.getAttribute('href'):'');
     let image=selectorValue(node,channel.selectors?.image,'image')||attrFrom(node,['img'],['src','data-src','data-lazy-src']);
     let videoUrl=selectorValue(node,channel.selectors?.video,'video')||attrFrom(node,['video[src]','video source[src]','source[src]','a[href$=".mp4"]','a[href*=".m3u8"]'],['src','href']);
     link=absoluteUrl(link,baseUrl); image=absoluteUrl(image,baseUrl); videoUrl=absoluteUrl(videoUrl,baseUrl);
     if(!videoUrl&&isMediaUrl(link)) videoUrl=link; if(!image&&isImageUrl(link)) image=link;
-    let type=videoUrl?'video':image?'image':'article'; if(channel.type!=='mixed'&&channel.type!=='feed') type=channel.type;
+    const articleish=!!node.matches?.('article,.post,.entry,[class*="article"],[class*="post"]')||!!node.querySelector?.('p,h1,h2,h3');
+    let type=videoUrl?'video':articleish?'article':image?'image':'article';
+    if(channel.type==='article'&&!videoUrl)type='article';
+    if(channel.type==='image'&&!videoUrl&&image&&!articleish)type='image';
+    const excerpt=nodeText(node,['p','.excerpt','.summary','.description']).replace(/\s+/g,' ').trim().slice(0,500);
     const timeEl=node.querySelector?.('time[datetime], [data-date], [data-published]'); const publishedRaw=timeEl?.getAttribute?.('datetime')||timeEl?.getAttribute?.('data-date')||timeEl?.getAttribute?.('data-published')||''; const publishedAt=Date.parse(publishedRaw)||0;
-    return {id:uid(),title:title.replace(/\s+/g,' ').trim().slice(0,300),url:link,image,videoUrl,type,channelId:channel.id,channelName:channel.name,publishedAt};
-  }).filter(x=>x.url&&x.title);
+    return {id:uid(),title:title.replace(/\s+/g,' ').trim().slice(0,300),url:link,image,videoUrl,type,excerpt,channelId:channel.id,channelName:channel.name,publishedAt};
+  }).filter(x=>x.url&&x.title&&!adLikeText(x.title));
   return uniqueBy(items,x=>x.url).slice(0,160);
 }
 function parseChannelContent(text,channel,baseUrl){
