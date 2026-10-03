@@ -498,3 +498,62 @@ main,.view,.channel-list{max-width:100%;min-width:0}
   .video-gallery-open{border-radius:12px}
   .video-gallery-meta strong{font-size:11px}
 }
+
+
+/* MyMelter 1.6.3 — adaptive video masonry + categories */
+.video-category-strip{
+  display:flex;gap:14px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  padding:12px 10px 10px;background:#111;color:#fff;white-space:nowrap;position:sticky;top:0;z-index:8
+}
+.video-category-strip::-webkit-scrollbar{display:none}
+.video-category-tab{
+  flex:0 0 auto;border:0;background:transparent;color:#9ea5b1;padding:8px 2px 10px;font-weight:800;font-size:14px;
+  border-bottom:3px solid transparent
+}
+.video-category-tab.active{color:#fff;border-bottom-color:#fff}
+.video-gallery{
+  display:block;
+  columns:2;
+  column-gap:6px;
+  background:#111;
+  padding:6px
+}
+.video-gallery-card{
+  break-inside:avoid;
+  display:inline-block;
+  width:100%;
+  margin:0 0 8px;
+  background:#111;
+  color:#fff
+}
+.video-gallery-open{
+  position:relative;
+  display:block;
+  width:100%;
+  aspect-ratio:auto;
+  border:0;
+  padding:0;
+  border-radius:14px;
+  overflow:hidden;
+  background:#1c1d22
+}
+.video-gallery-open img{
+  width:100%;
+  height:auto;
+  max-height:none;
+  object-fit:contain;
+  display:block;
+  background:#1c1d22
+}
+.video-gallery-fallback{
+  width:100%;
+  aspect-ratio:9/16;
+  display:grid;
+  place-items:center;
+  font-size:32px;
+  color:#fff;
+  background:linear-gradient(145deg,#2b2e36,#14161b)
+}
+.video-gallery-play{font-size:24px}
+.video-gallery-meta{padding:5px 4px 8px}
+@media(min-width:700px){.video-gallery{columns:3}}
