@@ -4,6 +4,8 @@
 // 取得先が403を返した場合は、その403を維持して「Worker到達済み / upstream拒否」を
 // MyMelter側で判別できる診断ヘッダーを返します。IP回避やCAPTCHA回避は行いません。
 
+const WORKER_VERSION='1.3';
+
 const CORS_HEADERS={
   'Access-Control-Allow-Origin':'*',
   'Access-Control-Allow-Methods':'GET,OPTIONS',
@@ -30,7 +32,7 @@ function plain(message,status,errorCode,extra={}){
       ...CORS_HEADERS,
       'Content-Type':'text/plain; charset=utf-8',
       'X-MyMelter-Error':errorCode,
-      'X-MyMelter-Worker-Version':'1.3'
+      'X-MyMelter-Worker-Version':WORKER_VERSION
       ,...extra
     }
   });
@@ -41,7 +43,7 @@ export default {
     const req=new URL(request.url);
 
     if(request.method==='OPTIONS'){
-      return new Response(null,{status:204,headers:{...CORS_HEADERS,'X-MyMelter-Worker-Version':'1.3'}});
+      return new Response(null,{status:204,headers:{...CORS_HEADERS,'X-MyMelter-Worker-Version':WORKER_VERSION}});
     }
     if(request.method!=='GET') return plain('GET only',405,'method-not-allowed');
 
@@ -82,7 +84,7 @@ export default {
     const headers=new Headers(upstream.headers);
     for(const [k,v] of Object.entries(CORS_HEADERS)) headers.set(k,v);
     headers.set('Cache-Control','private, max-age=90');
-    headers.set('X-MyMelter-Worker-Version','1.2');
+    headers.set('X-MyMelter-Worker-Version',WORKER_VERSION);
     headers.set('X-MyMelter-Upstream-Status',String(upstream.status));
     headers.set('X-MyMelter-Final-URL',upstream.url||target.href);
     headers.set('X-MyMelter-Error',upstream.ok?'none':'upstream-http');
