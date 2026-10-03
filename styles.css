@@ -466,3 +466,9 @@ main,.view,.channel-list{max-width:100%;min-width:0}
   min-height:calc(100dvh - 180px);
   padding-bottom:calc(28px + var(--safe-bottom));
 }
+
+
+/* MyMelter 1.5.6 — channel origin button */
+.channel-origin-row{margin:12px 0 14px}
+.channel-origin-btn{width:100%;min-height:48px;font-weight:800}
+.channel-origin-btn:disabled{opacity:.45}
