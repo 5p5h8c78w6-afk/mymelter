@@ -1,4 +1,4 @@
-# MyMelter PWA 1.5.4
+# MyMelter PWA 1.5.5
 
 **完全0円ルートを優先した、自分用のチャンネル型Webコンテンツ閲覧PWAです。**
 
@@ -7,6 +7,14 @@
 - GitHub Pages: 無料で利用可能（公開リポジトリ）
 - iPhone: Safari → 共有 →「ホーム画面に追加」でアプリ風に起動
 - データ: 原則この端末の `localStorage` に保存
+
+## 1.5.5 の修正
+
+- `nwknews.jp` などLivedoor系ブログで、記事本文が `<p>` ではなく `<div> + <br>` 中心のためClean Readerが「本文を十分に抽出できませんでした」になる問題を修正しました。
+- `.article-body-inner` / `.article-body-more` / `.entry-body` / `.posted-body` / `.blogbody` などLivedoor系の本文コンテナを追加しました。
+- 通常の段落抽出で本文量が足りない場合は、`<br>` とブロック要素の境界を改行として再構成し、広告・スポンサー・ナビ・フッターを除外したテキストReaderへフォールバックします。
+- 本文画像は引き続きReader内に残します。小さいバナー画像は除外します。
+- 1.5.4までのReaderスクロール、最大5ページ自動読込、Safari取り込みv17、画像ビューア、Worker 1.3、HLS保存は変更していません。
 
 ## 1.5.4 の修正
 
@@ -267,4 +275,4 @@ MyMelterは公開HTML、RSS/Atom、通常の画像/動画URLを中心に扱い�
 
 ## バージョン
 
-`MyMelter PWA 1.5.4`
+`MyMelter PWA 1.5.5`
