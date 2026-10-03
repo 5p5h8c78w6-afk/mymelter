@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.5';
+const APP_VERSION = '1.5.6';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -362,7 +362,7 @@ function openChannelEditor(channel=null){
   $('#channelGenre').innerHTML='<option value="">自動判定</option>'+GENRES.map(g=>`<option>${g}</option>`).join(''); $('#channelGenre').value=c.genre||'';
   $('#channelId').value=c.id||''; $('#channelName').value=c.name||''; $('#channelUrl').value=c.url||''; $('#channelType').value=c.type||'mixed'; $('#channelColor').value=c.color||colorForType(c.type);
   $('#itemSelector').value=c.selectors?.item||''; $('#titleSelector').value=c.selectors?.title||''; $('#imageSelector').value=c.selectors?.image||''; $('#linkSelector').value=c.selectors?.link||''; $('#videoSelector').value=c.selectors?.video||''; $('#searchUrl').value=c.searchUrl||'';
-  $('#deleteChannelBtn').hidden=!channel; $('#channelTestStatus').textContent='';
+  $('#deleteChannelBtn').hidden=!channel; $('#channelTestStatus').textContent=''; $('#openChannelOriginBtn').disabled=!normalizeUrl(c.url||'');
   $('#channelDialog').showModal();
 }
 function channelFromForm(){
@@ -1805,6 +1805,11 @@ $('#discoverUrl').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDe
 $('#channelCloseBtn').onclick=()=>$('#channelDialog').close();
 $('#channelForm').addEventListener('submit',e=>{e.preventDefault();saveChannelFromForm();});
 $('#deleteChannelBtn').onclick=()=>{if(!activeEditId)return;if(confirm('このチャンネルを削除しますか？')){state.channels=state.channels.filter(x=>x.id!==activeEditId);saveState();$('#channelDialog').close();toast('削除しました');}};
+$('#channelUrl').addEventListener('input',()=>{$('#openChannelOriginBtn').disabled=!normalizeUrl($('#channelUrl').value.trim());});
+$('#openChannelOriginBtn').onclick=()=>{
+  const url=normalizeUrl($('#channelUrl').value.trim());if(!url){toast('URLを確認してください');return;}
+  const win=window.open(url,'_blank','noopener');if(!win)toast('Safariが元サイトを開けませんでした');
+};
 $('#testChannelBtn').onclick=async()=>{const c=channelFromForm();if(!c.url){toast('URLを確認してください');return;}$('#channelTestStatus').textContent='取得テスト中…';try{const t=await fetchText(c.url);const items=parseChannelContent(t,c,c.url);$('#channelTestStatus').textContent=`取得成功：${items.length}件を抽出できました。`;}catch(e){$('#channelTestStatus').textContent=`取得失敗：${e.message}`;}};
 $('#channelFilter').oninput=renderChannelManager; $('#channelTypeFilter').onchange=renderChannelManager; $('#channelSort').onchange=e=>{state.ui.channelSort=e.target.value;saveState(false);renderChannelManager();};
 $('#savedFilter').oninput=renderSaved; $('#savedTypeFilter').onchange=renderSaved; $('#savedSort').onchange=e=>{state.ui.savedSort=e.target.value;saveState(false);renderSaved();};
