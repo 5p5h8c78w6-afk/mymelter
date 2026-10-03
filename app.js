@@ -1,4 +1,4 @@
-const APP_VERSION = '1.6.6';
+const APP_VERSION = '1.7.0';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -76,14 +76,7 @@ function fmtDate(ts){ if(!ts) return ''; try { return new Intl.DateTimeFormat('j
 function typeLabel(type){ return ({video:'動画',image:'画像',article:'記事',feed:'RSS/Atom',mixed:'混在'})[type] || '混在'; }
 function typeGlyph(type){ return ({video:'▶',image:'▧',article:'≡',feed:'◎',mixed:'◇'})[type] || '◇'; }
 function colorForType(type){ return ({video:'red',image:'green',article:'purple',feed:'blue',mixed:'gold'})[type] || 'blue'; }
-function mediaKind(item){
-  if(item?.type==='article'||item?.type==='feed')return 'article';
-  if(item?.type==='image')return 'image';
-  if(item?.type==='video')return 'video';
-  if(item?.videoUrl)return 'video';
-  if(item?.image)return 'image';
-  return item?.type&&item.type!=='mixed'?item.type:'article';
-}
+function mediaKind(item){ return MyMelterContentEngine.kind(item||{}); }
 function adLikeText(text=''){return /(?:【PR】|\[PR\]|(^|\s)PR(?:\s|$)|広告|スポンサー|sponsored|advertisement|affiliate|アフィリエイト|promoted|promotion|amazonで|楽天で|詳しくはこちら)/i.test(String(text||''));}
 function adLikeElement(el){
   if(!el)return false;
@@ -92,13 +85,7 @@ function adLikeElement(el){
   const text=(el.textContent||'').replace(/\s+/g,' ').trim();
   return text.length>0&&text.length<=180&&adLikeText(text);
 }
-function contentProfile(items=[]){
-  const counts={video:0,image:0,article:0};
-  for(const x of items){const k=mediaKind(x);if(counts[k]!=null)counts[k]++;}
-  const total=counts.video+counts.image+counts.article||1;
-  let mode='mixed';if(counts.video/total>=.55)mode='video';else if(counts.image/total>=.55)mode='image';else if(counts.article/total>=.55)mode='article';
-  return {mode,counts,total};
-}
+function contentProfile(items=[]){ return MyMelterContentEngine.profile(items||[]); }
 function preferredReaderMode(items=[]){const p=contentProfile(items);return p.mode==='video'?'video':p.mode==='image'?'media':'list';}
 function normalizeSimilarSiteUrl(raw=''){
   const url=normalizeUrl(raw);if(!url)return '';
@@ -111,25 +98,9 @@ function normalizeSimilarSiteUrl(raw=''){
 }
 function uniqueBy(arr, keyFn){ const seen=new Set(); return arr.filter(x=>{const k=keyFn(x); if(!k||seen.has(k)) return false; seen.add(k); return true;}); }
 function browserChannelItems(channel){
-  const all=[...(Array.isArray(channel?.snapshotItems)?channel.snapshotItems:[]),...(Array.isArray(channel?.deepDiveItems)?channel.deepDiveItems:[])];
-  return prioritizeImportedItems(uniqueBy(all,x=>x?.videoUrl||x?.url||x?.id)).slice(0,120);
+  return MyMelterContentEngine.channelItems(channel||{}).slice(0,160);
 }
-function prioritizeImportedItems(items=[]){
-  const list=(Array.isArray(items)?items:[]).filter(Boolean).map((x,i)=>({...x,_order:i}));
-  const videoPosters=new Set(list.filter(x=>mediaKind(x)==='video'&&x.image).map(x=>normalizeUrl(x.image)).filter(Boolean));
-  let out=list.filter(x=>!(mediaKind(x)==='image'&&x.image&&videoPosters.has(normalizeUrl(x.image))));
-  const hasRank=out.some(x=>/^\d+$/.test(String(x.browserRank||''))&&Number(x.browserRank)>0);
-  if(hasRank){
-    out=out.sort((a,b)=>{
-      const ar=Number(a.browserRank||0),br=Number(b.browserRank||0),aRank=ar>0,bRank=br>0;
-      if(aRank&&bRank&&ar!==br)return ar-br;
-      if(aRank!==bRank)return aRank?-1:1;
-      const av=mediaKind(a)==='video',bv=mediaKind(b)==='video';if(av!==bv)return av?-1:1;
-      return a._order-b._order;
-    });
-  }
-  return out.map(({_order,...x})=>x);
-}
+function prioritizeImportedItems(items=[]){ return MyMelterContentEngine.mergeItems(items||[]); }
 function isMediaUrl(url=''){ return /\.(mp4|m4v|mov|webm|m3u8)(?:$|[?#])/i.test(url); }
 function isImageUrl(url=''){ return /\.(jpe?g|png|gif|webp|avif)(?:$|[?#])/i.test(url); }
 function fmtDuration(seconds){ const n=Math.max(0,Math.floor(Number(seconds)||0)); const m=Math.floor(n/60); const sec=String(n%60).padStart(2,'0'); return `${m}:${sec}`; }
@@ -202,15 +173,20 @@ function saveState(render=true){
   if(render) renderAll();
 }
 function normalizeChannel(c){
+  const snapshotItems=MyMelterContentEngine.mergeItems(Array.isArray(c?.snapshotItems)?c.snapshotItems:[]);
+  const deepDiveItems=MyMelterContentEngine.mergeItems(Array.isArray(c?.deepDiveItems)?c.deepDiveItems:[]);
+  const categorySnapshots=MyMelterContentEngine.normalizeCategorySnapshots(c?.categorySnapshots||{});
+  const unified=MyMelterContentEngine.mergeItems(snapshotItems,deepDiveItems);
+  const inferredType=(c?.type&&c.type!=='mixed')?c.type:MyMelterContentEngine.profile(unified).mode;
   return {
-    ...c, genre:inferGenre(c), id:c.id||uid(), name:c.name||domainOf(c.url)||'チャンネル', url:c.url||'', type:c.type||'mixed', color:c.color||colorForType(c.type||'mixed'),
-    searchUrl:c.searchUrl||'', selectors:{item:'',title:'',image:'',link:'',video:'',...(c.selectors||{})},
-    source:c.source||'', browserSourceUrl:c.browserSourceUrl||'',
-    categoryTabs:Array.isArray(c.categoryTabs)?c.categoryTabs.map(x=>({name:String(x?.name||'').trim().slice(0,60),url:normalizeUrl(x?.url||'')})).filter(x=>x.name&&x.url):[],
-    categorySnapshots:c.categorySnapshots&&typeof c.categorySnapshots==='object'?c.categorySnapshots:{},
-    snapshotItems:Array.isArray(c.snapshotItems)?c.snapshotItems:[],
-    deepDiveItems:Array.isArray(c.deepDiveItems)?c.deepDiveItems:[],
-    createdAt:c.createdAt||Date.now(), updatedAt:Date.now(), itemCount:c.itemCount||0, lastOpenedAt:c.lastOpenedAt||0
+    ...c, genre:inferGenre(c||{}), id:c?.id||uid(), name:c?.name||domainOf(c?.url)||'チャンネル', url:c?.url||'', type:inferredType||'mixed', color:c?.color||colorForType(inferredType||'mixed'),
+    searchUrl:c?.searchUrl||'', selectors:{item:'',title:'',image:'',link:'',video:'',...(c?.selectors||{})},
+    source:c?.source||'', browserSourceUrl:c?.browserSourceUrl||'',
+    categoryTabs:Array.isArray(c?.categoryTabs)?c.categoryTabs.map(x=>({name:String(x?.name||'').trim().slice(0,60),url:normalizeUrl(x?.url||'')})).filter(x=>x.name&&x.url):[],
+    categorySnapshots,
+    snapshotItems,
+    deepDiveItems,
+    createdAt:c?.createdAt||Date.now(), updatedAt:Date.now(), itemCount:unified.length||Number(c?.itemCount||0), lastOpenedAt:c?.lastOpenedAt||0
   };
 }
 
