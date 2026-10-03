@@ -1,5 +1,5 @@
-const CACHE='mymelter-shell-v1.6.1';
-const SHELL=['./','./index.html','./styles.css?v=1.6.1','./app.js?v=1.6.1','./features.js?v=1.6.1','./vendor/hls-1.6.13.min.js','./manifest.webmanifest','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png'];
+const CACHE='mymelter-shell-v1.6.2';
+const SHELL=['./','./index.html','./styles.css?v=1.6.2','./app.js?v=1.6.2','./features.js?v=1.6.2','./vendor/hls-1.6.23.min.js','./manifest.webmanifest','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
 self.addEventListener('fetch',e=>{
