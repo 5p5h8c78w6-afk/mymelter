@@ -1,4 +1,4 @@
-const APP_VERSION = '1.6.3';
+const APP_VERSION = '1.6.4';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -110,6 +110,22 @@ function normalizeSimilarSiteUrl(raw=''){
   }catch{return '';}
 }
 function uniqueBy(arr, keyFn){ const seen=new Set(); return arr.filter(x=>{const k=keyFn(x); if(!k||seen.has(k)) return false; seen.add(k); return true;}); }
+function prioritizeImportedItems(items=[]){
+  const list=(Array.isArray(items)?items:[]).filter(Boolean).map((x,i)=>({...x,_order:i}));
+  const videoPosters=new Set(list.filter(x=>mediaKind(x)==='video'&&x.image).map(x=>normalizeUrl(x.image)).filter(Boolean));
+  let out=list.filter(x=>!(mediaKind(x)==='image'&&x.image&&videoPosters.has(normalizeUrl(x.image))));
+  const hasRank=out.some(x=>/^\d+$/.test(String(x.browserRank||''))&&Number(x.browserRank)>0);
+  if(hasRank){
+    out=out.sort((a,b)=>{
+      const ar=Number(a.browserRank||0),br=Number(b.browserRank||0),aRank=ar>0,bRank=br>0;
+      if(aRank&&bRank&&ar!==br)return ar-br;
+      if(aRank!==bRank)return aRank?-1:1;
+      const av=mediaKind(a)==='video',bv=mediaKind(b)==='video';if(av!==bv)return av?-1:1;
+      return a._order-b._order;
+    });
+  }
+  return out.map(({_order,...x})=>x);
+}
 function isMediaUrl(url=''){ return /\.(mp4|m4v|mov|webm|m3u8)(?:$|[?#])/i.test(url); }
 function isImageUrl(url=''){ return /\.(jpe?g|png|gif|webp|avif)(?:$|[?#])/i.test(url); }
 function fmtDuration(seconds){ const n=Math.max(0,Math.floor(Number(seconds)||0)); const m=Math.floor(n/60); const sec=String(n%60).padStart(2,'0'); return `${m}:${sec}`; }
@@ -187,6 +203,7 @@ function normalizeChannel(c){
     searchUrl:c.searchUrl||'', selectors:{item:'',title:'',image:'',link:'',video:'',...(c.selectors||{})},
     source:c.source||'', browserSourceUrl:c.browserSourceUrl||'',
     categoryTabs:Array.isArray(c.categoryTabs)?c.categoryTabs.map(x=>({name:String(x?.name||'').trim().slice(0,60),url:normalizeUrl(x?.url||'')})).filter(x=>x.name&&x.url):[],
+    categorySnapshots:c.categorySnapshots&&typeof c.categorySnapshots==='object'?c.categorySnapshots:{},
     snapshotItems:Array.isArray(c.snapshotItems)?c.snapshotItems:[],
     deepDiveItems:Array.isArray(c.deepDiveItems)?c.deepDiveItems:[],
     createdAt:c.createdAt||Date.now(), updatedAt:Date.now(), itemCount:c.itemCount||0, lastOpenedAt:c.lastOpenedAt||0
@@ -595,14 +612,23 @@ async function loadVideoCategory(index){
   if(!activeChannel)return;const tabs=videoCategoryTabs(activeChannel),tab=tabs[Number(index)];if(!tab)return;
   const current=currentVideoCategoryIndex(activeChannel);if(Number(index)===current&&activeItems.length)return;
   const root=$('#readerContent');if(root)root.innerHTML=videoCategoryStripHTML(activeChannel)+'<div class="reader-loading">カテゴリを読み込んでいます…</div>';
+  const cache=activeChannel.categorySnapshots&&typeof activeChannel.categorySnapshots==='object'?activeChannel.categorySnapshots:{};
+  const cached=prioritizeImportedItems(cache[normalizeUrl(tab.url)]||cache[tab.url]||[]);
   try{
-    const text=await fetchText(tab.url),loaded=await loadPaginatedChannelItems(activeChannel,text,tab.url,3),items=loaded.items;
+    let items=cached;
+    if(!items.length){
+      const text=await fetchText(tab.url),loaded=await loadPaginatedChannelItems(activeChannel,text,tab.url,3);items=prioritizeImportedItems(loaded.items);
+      if(items.length){activeChannel.categorySnapshots={...cache,[normalizeUrl(tab.url)]:items};saveState(false);}
+    }
+    if(!items.length)throw new Error('カテゴリ項目なし');
     activeChannel._activeCategoryUrl=tab.url;activeItems=items.map(x=>({...x,channelId:activeChannel.id,channelName:activeChannel.name}));
-    rememberItems(activeItems);applyReaderProfile(activeChannel,activeItems);renderReader();
+    rememberItems(activeItems);applyReaderProfile(activeChannel,activeItems);
+    if(activeVideoItems().length)setReaderMode('video',false);
+    renderReader();
     document.querySelector('.reader-screen')?.scrollTo({top:0,behavior:'auto'});
   }catch(e){
-    toast('カテゴリを直接取得できません。Safari取り込みを使ってください');
-    openBrowserImportSetup(tab.url);
+    toast('このカテゴリは取得済みデータがありません。v20で再取り込みしてください');
+    renderReader();
   }
 }
 function candidateFrom(url,name,type='mixed',extra={}){ return {id:uid(),url:normalizeUrl(url),name:name||domainOf(url),type,color:colorForType(type),image:normalizeUrl(extra.image||extra.thumbnail||''),similarityScore:Number(extra.similarityScore||0),selectors:{item:'',title:'',image:'',link:'',video:'',...(extra.selectors||{})},searchUrl:extra.searchUrl||'',source:extra.source||'auto'}; }
@@ -1015,7 +1041,7 @@ async function openChannel(channel,keyword=''){
   if(keyword){ if(channel.searchUrl) url=channel.searchUrl.replace('{keyword}',encodeURIComponent(keyword)); else { $('#readerStatus').textContent='検索URLが未設定です。登録済みの取得結果を絞り込む場合は一覧から検索してください。'; } }
   try{
     if(channel.source==='browser'&&Array.isArray(channel.snapshotItems)&&channel.snapshotItems.length){
-      let items=channel.snapshotItems.map(x=>({...x,channelId:channel.id,channelName:channel.name}));
+      let items=prioritizeImportedItems(channel.snapshotItems).map(x=>({...x,channelId:channel.id,channelName:channel.name}));
       if(keyword){const q=keyword.toLowerCase();items=items.filter(x=>(x.title||'').toLowerCase().includes(q));}
       activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); const profile=applyReaderProfile(channel,items); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
       $('#readerStatus').textContent=`${items.length}件 · Safari取込 · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}`; renderReader(); return;
@@ -1983,12 +2009,23 @@ $('#readerSearchBtn').onclick=()=>activeChannel&&openChannel(activeChannel,$('#r
 $('#readerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#readerSearchBtn').click();}});
 let readerSwipeStart=null;
 $('#readerContent').addEventListener('touchstart',e=>{
-  if(!document.querySelector('.reader-screen')?.classList.contains('video-first')||videoCategoryTabs().length<2)return;
+  if(activeReaderMode!=='video'||videoCategoryTabs().length<2||e.target.closest('.video-category-strip'))return;
   const t=e.touches?.[0];if(t)readerSwipeStart={x:t.clientX,y:t.clientY};
 },{passive:true});
 $('#readerContent').addEventListener('touchend',e=>{
   if(!readerSwipeStart)return;const t=e.changedTouches?.[0],start=readerSwipeStart;readerSwipeStart=null;if(!t)return;
   const dx=t.clientX-start.x,dy=t.clientY-start.y;if(Math.abs(dx)<70||Math.abs(dx)<Math.abs(dy)*1.25)return;
+  const tabs=videoCategoryTabs(),cur=currentVideoCategoryIndex(),next=dx<0?Math.min(tabs.length-1,cur+1):Math.max(0,cur-1);
+  if(next!==cur)loadVideoCategory(next);
+},{passive:true});
+let readerPointerStart=null;
+$('#readerContent').addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse'||activeReaderMode!=='video'||videoCategoryTabs().length<2||e.target.closest('.video-category-strip'))return;
+  readerPointerStart={x:e.clientX,y:e.clientY,id:e.pointerId};
+},{passive:true});
+$('#readerContent').addEventListener('pointerup',e=>{
+  if(!readerPointerStart||e.pointerId!==readerPointerStart.id)return;const start=readerPointerStart;readerPointerStart=null;
+  const dx=e.clientX-start.x,dy=e.clientY-start.y;if(Math.abs(dx)<55||Math.abs(dx)<Math.abs(dy)*1.15)return;
   const tabs=videoCategoryTabs(),cur=currentVideoCategoryIndex(),next=dx<0?Math.min(tabs.length-1,cur+1):Math.max(0,cur-1);
   if(next!==cur)loadVideoCategory(next);
 },{passive:true});
