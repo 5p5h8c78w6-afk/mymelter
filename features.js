@@ -1,4 +1,4 @@
-/* MyMelter 1.6.3: shared pure helpers. Loaded before app.js. */
+/* MyMelter 1.6.4: shared pure helpers. Loaded before app.js. */
 const MyMelterFeatures=(()=>{
   function safeUrl(raw,base){
     try{const u=new URL(raw,base);if(!/^https?:$/.test(u.protocol)||u.username||u.password)return '';
