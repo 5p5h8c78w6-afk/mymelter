@@ -503,7 +503,7 @@ function parseSitemap(xml,channel){
   return locs.slice(0,200).map(url=>{let title='ページ';try{const u=new URL(url);title=decodeURIComponent(u.pathname.split('/').filter(Boolean).pop()||u.hostname).replace(/[-_]/g,' ');}catch{}return{id:uid(),title,url,type:'article',channelId:channel.id,channelName:channel.name};});
 }
 function genericNodes(doc){
-  const candidates=['article','main .post','main .item','main .card','main li','.post','.entry','.item','.card'];
+  const candidates=['main > article,main > section,main > .post,main > .entry,main > .item,main > .card','article','main .post','main .item','main .card','main li','.post','.entry','.item','.card'];
   for(const sel of candidates){let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{} nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href]')&&(n.textContent||'').trim().length>3); if(nodes.length>=2) return nodes.slice(0,160);}
   const textLinks=[...doc.querySelectorAll('main a[href],article a[href],a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('li,article,div,section')||a)&&(a.textContent||'').trim().length>3);if(textLinks.length>=2)return textLinks.slice(0,160);
   return [...doc.querySelectorAll('a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('figure,div,section')||a)&&a.querySelector('img')).slice(0,160);
