@@ -760,9 +760,9 @@ var parseImages=function(doc,base){
 var parseAll=function(doc,base){
   parseArticles(doc,base);
   parseImages(doc,base);
-  parseTw(doc,base);
-  parseGeneric(doc,base);
-  parseRaw(doc,base)
+  var host='';try{host=new URL(base).hostname}catch(e){}
+  if(/(^|\.)twidouga\.net$/i.test(host)){parseTw(doc,base);parseRaw(doc,base)}
+  parseGeneric(doc,base)
 };
 var compactItems=function(arr){
   var list=(arr||[]).map(function(x,i){return{x:x,o:i}}),posters={};
