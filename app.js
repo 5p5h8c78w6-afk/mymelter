@@ -934,10 +934,16 @@ function consumeBrowserImportHash(){
       return {id:uid(),title:String(x?.t||'無題').trim().slice(0,300),url:url||videoUrl,image,videoUrl,type,excerpt:String(x?.e||'').trim().slice(0,800),browserRank:String(x?.r||''),deepSource:String(x?.z||''),deepDive:!!deep};
     }).filter(Boolean);
     const primaryRaw=mapImported(payload?.i,false);
-    const items=uniqueBy(primaryRaw,x=>x.browserRank?('rank:'+x.browserRank):(x.id||x.videoUrl||x.url)).slice(0,30);
+    const items=prioritizeImportedItems(uniqueBy(primaryRaw,x=>x.browserRank?('rank:'+x.browserRank):(x.id||x.videoUrl||x.url))).slice(0,30);
     const primaryKeys=new Set(items.map(x=>x.videoUrl||x.url).filter(Boolean));
-    const deepItems=uniqueBy(mapImported(payload?.d,true),x=>x.videoUrl||x.url).filter(x=>!primaryKeys.has(x.videoUrl||x.url)).slice(0,60);
+    const deepItems=prioritizeImportedItems(uniqueBy(mapImported(payload?.d,true),x=>x.videoUrl||x.url).filter(x=>!primaryKeys.has(x.videoUrl||x.url))).slice(0,60);
     const categoryTabs=uniqueBy((Array.isArray(payload?.c)?payload.c:[]).map(x=>({name:String(x?.n||'').trim().slice(0,60),url:normalizeUrl(x?.u||'')})).filter(x=>x.name&&x.url),x=>x.url).slice(0,16);
+    const categorySnapshots={};
+    for(const g of (Array.isArray(payload?.g)?payload.g:[])){
+      const gu=normalizeUrl(g?.u||'');if(!gu)continue;
+      const gi=prioritizeImportedItems(mapImported(g?.i,false)).slice(0,20);
+      if(gi.length)categorySnapshots[gu]=gi;
+    }
     const sourceOrigin=new URL(source).origin,registeredDomains=new Set(state.channels.map(x=>domainOf(x.url)).filter(Boolean));
     const relatedSites=uniqueBy((Array.isArray(payload?.e)?payload.e:[]).map(x=>{
       const rawUrl=normalizeUrl(x?.u||''),url=normalizeSimilarSiteUrl(rawUrl),name=String(x?.n||domainOf(rawUrl)||'関連サイト').trim().slice(0,120),image=normalizeUrl(x?.i||''),similarityScore=Number(x?.sc||0);if(!url||!name)return null;
@@ -950,16 +956,16 @@ function consumeBrowserImportHash(){
     if(channel){
       const primary=items.length?items:(channel.snapshotItems||[]);
       const deep=deepItems.length?deepItems:(channel.deepDiveItems||[]);
-      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.categoryTabs=categoryTabs.length?categoryTabs:(channel.categoryTabs||[]); channel.snapshotItems=primary; channel.deepDiveItems=deep; channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.itemCount=primary.length; channel.updatedAt=Date.now();
+      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.categoryTabs=categoryTabs.length?categoryTabs:(channel.categoryTabs||[]); channel.categorySnapshots=Object.keys(categorySnapshots).length?{...(channel.categorySnapshots||{}),...categorySnapshots}:(channel.categorySnapshots||{}); channel.snapshotItems=primary; channel.deepDiveItems=deep; channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.itemCount=primary.length; channel.updatedAt=Date.now();
       [...primary,...deep].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       rememberItems([...primary,...deep]);
     }else{
-      channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,categoryTabs,snapshotItems:items,deepDiveItems:deepItems,relatedSites,relatedSitesVersion:Number(payload?.v||0),itemCount:items.length});
+      channel=normalizeChannel({name:title,url:source,type:'mixed',color:'blue',source:'browser',browserSourceUrl:source,categoryTabs,categorySnapshots,snapshotItems:items,deepDiveItems:deepItems,relatedSites,relatedSitesVersion:Number(payload?.v||0),itemCount:items.length});
       [...items,...deepItems].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); state.meta.browserImportVersion=Math.max(Number(state.meta.browserImportVersion||0),Number(payload?.v||0)); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / カテゴリ '+(channel.categoryTabs?.length||0)+'件 / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<19?'（取込コードv19へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / カテゴリ '+(channel.categoryTabs?.length||0)+'件（事前取得 '+Object.keys(channel.categorySnapshots||{}).length+'件） / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<20?'（取込コードv20へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
