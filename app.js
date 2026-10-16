@@ -69,7 +69,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 function clone(v){ return JSON.parse(JSON.stringify(v)); }
 function uid(){ return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function esc(v=''){ return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-function absoluteUrl(url, base){ try { return new URL(url, base).href; } catch { return ''; } }
+function absoluteUrl(url, base){ if(!String(url??'').trim())return '';try { return new URL(url, base).href; } catch { return ''; } }
 function domainOf(url){ try { return new URL(url).hostname.replace(/^www\./,''); } catch { return ''; } }
 function normalizeUrl(url){ try { const u = new URL(url); if(!/^https?:$/.test(u.protocol)) return ''; u.hash=''; return u.href; } catch { return ''; } }
 function fmtDate(ts){ if(!ts) return ''; try { return new Intl.DateTimeFormat('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(ts)); } catch { return ''; } }
@@ -77,11 +77,13 @@ function typeLabel(type){ return ({video:'動画',image:'画像',article:'記事
 function typeGlyph(type){ return ({video:'▶',image:'▧',article:'≡',feed:'◎',mixed:'◇'})[type] || '◇'; }
 function colorForType(type){ return ({video:'red',image:'green',article:'purple',feed:'blue',mixed:'gold'})[type] || 'blue'; }
 function mediaKind(item){ return MyMelterContentEngine.kind(item||{}); }
-function adLikeText(text=''){return /(?:【PR】|\[PR\]|(^|\s)PR(?:\s|$)|広告|スポンサー|sponsored|advertisement|affiliate|アフィリエイト|promoted|promotion|amazonで|楽天で|詳しくはこちら)/i.test(String(text||''));}
+function adLikeText(text=''){return /(?:【(?:PR|広告)】|\[(?:PR|広告)\]|(^|\s)PR(?:\s|$)|^(?:広告|スポンサー)(?:$|[\s:：・|])|sponsored|advertisement|affiliate|アフィリエイト|promoted|promotion|amazonで|楽天で|詳しくはこちら)/i.test(String(text||'').trim());}
 function adLikeElement(el){
   if(!el)return false;
   const meta=((el.id||'')+' '+(el.className||'')+' '+(el.getAttribute?.('role')||'')+' '+(el.getAttribute?.('aria-label')||'')).toLowerCase();
   if(/(^|[\s_-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([\s_-]|$)/i.test(meta))return true;
+  // Text on a nested advert must not classify its containing article or page.
+  if(el.matches?.('html,body,main,article,section')||el.querySelector?.('article,section,div,p,li,blockquote'))return false;
   const text=(el.textContent||'').replace(/\s+/g,' ').trim();
   return text.length>0&&text.length<=180&&adLikeText(text);
 }
@@ -504,7 +506,7 @@ function parseSitemap(xml,channel){
 }
 function genericNodes(doc){
   const candidates=['main > article,main > section,main > .post,main > .entry,main > .item,main > .card','article','main .post','main .item','main .card','main li','.post','.entry','.item','.card'];
-  for(const sel of candidates){let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{} nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href]')&&(n.textContent||'').trim().length>3); if(nodes.length>=2) return nodes.slice(0,160);}
+  for(const sel of candidates){let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{} nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href]')&&((n.textContent||'').trim().length>3||n.querySelector('video,source,img'))); if(nodes.length>=2||(nodes.length===1&&nodes[0].matches('article,.post,.entry,.item,.card'))) return nodes.slice(0,160);}
   const textLinks=[...doc.querySelectorAll('main a[href],article a[href],a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('li,article,div,section')||a)&&(a.textContent||'').trim().length>3);if(textLinks.length>=2)return textLinks.slice(0,160);
   return [...doc.querySelectorAll('a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('figure,div,section')||a)&&a.querySelector('img')).slice(0,160);
 }
@@ -1316,6 +1318,7 @@ function groupThreadCommentLines(lines=[]){
   for(const raw of lines){
     const line=String(raw||'').replace(/\s+/g,' ').trim();if(!line)continue;
     if(stop.test(line)){if(cur)flush();if(groups.length)break;continue;}
+    if(cur&&/^>>?\d+/.test(line)){cur.body.push(line);continue;}
     if(isCommentLikeText(line)){
       flush();cur={head:line,body:[]};continue;
     }
@@ -2370,17 +2373,17 @@ if(importedBrowserResult?.kind==='web-search'){
   },0);
 }else if(importedBrowserResult){setTimeout(()=>openChannel(importedBrowserResult),0);}
 
-function similarCandidateSignals(name='',url='',context='',rel=''){
-  const text=`${name} ${url} ${context} ${rel}`,label=String(name||'').trim(),host=domainOf(url).toLowerCase();
-  const generic=/^(保存|開く|詳細|こちら|もっと見る|続きを読む|今すぐ|無料|登録|入会|ダウンロード|download|open|more)$/i.test(label);
+function similarCandidateSignals(name='',url='',context='',rel='',adContext=context){
+  const text=`${name} ${url} ${adContext} ${rel}`,label=String(name||'').trim(),host=domainOf(url).toLowerCase();
+  const generic=/^(保存|開く|詳細|こちら|もっと見る|続きを読む|今すぐ|無料|登録|入会|ログイン|ログアウト|ダウンロード|log\s*in|log\s*out|sign\s*in|sign\s*out|download|open|more)$/i.test(label);
   const ad=/(?:【PR】|\[PR\]|(^|\s)PR(?:\s|$)|広告|スポンサー|sponsored|アフィリエイト|affiliate|アダルトチャット|チャット広告|キャンペーン|promoted|promotion)/i.test(text);
   const adHost=/(^|\.)(doubleclick\.net|googlesyndication\.com|adservice\.google\.com|adnxs\.com|taboola\.com|outbrain\.com|criteo\.com|exoclick\.com|trafficjunky\.com|popads\.net|propellerads\.com|adsterra\.com)$/i.test(host);
   const relation=/関連|おすすめ|姉妹|相互|リンク集|友達|related|recommend|partner|similar/i.test(`${context} ${rel}`);
   return {generic,ad,adHost,relation};
 }
-function isSuitableSimilarCandidate(candidate,channel=null,context='',rel=''){
+function isSuitableSimilarCandidate(candidate,channel=null,context='',rel='',adContext=context){
   const url=normalizeUrl(candidate?.url||''),name=String(candidate?.name||'').trim();if(!url||!name)return false;
-  const s=similarCandidateSignals(name,url,context,rel);if(s.generic||s.ad||s.adHost)return false;
+  const s=similarCandidateSignals(name,url,context,rel,adContext);if(s.generic||s.ad||s.adHost)return false;
   const score=Number(candidate?.similarityScore||0);
   if(score>=4)return true;
   if(!channel)return false;
@@ -2392,6 +2395,18 @@ function relatedLinkImage(a,base){
   const raw=img?.getAttribute?.('data-src')||img?.getAttribute?.('src')||img?.getAttribute?.('data-original')||img?.getAttribute?.('data-lazy-src')||'';
   return absoluteUrl(raw,base);
 }
+function relatedLinkAdContext(a){
+  const context=[];
+  for(let el=a;el&&!el.matches('body,html');el=el.parentElement){
+    // Group headings can describe a relationship, but a sibling advert must not
+    // mark every link in that group as sponsored. Keep labels on a single-link
+    // card and explicit advertising containers as rejection evidence.
+    const meta=`${el.id||''} ${el.className||''} ${el.getAttribute('aria-label')||''}`;
+    if(/(^|[\s_-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([\s_-]|$)/i.test(meta))context.push('広告');
+    if(el===a||el.querySelectorAll('a[href]').length===1)context.push((el.textContent||'').slice(0,500));
+  }
+  return context.join(' ');
+}
 function externalSiteCandidates(doc,base,channel){
   const seenDomains=new Set(state.channels.map(c=>domainOf(c.url)).filter(Boolean)),origin=new URL(base).origin;
   const genre=inferGenre(channel),list=[];
@@ -2399,13 +2414,13 @@ function externalSiteCandidates(doc,base,channel){
     const rawUrl=MyMelterFeatures.safeUrl(a.getAttribute('href'),base),url=normalizeSimilarSiteUrl(rawUrl),name=(a.textContent||a.getAttribute('title')||'').replace(/\s+/g,' ').trim();
     if(!url||new URL(url).origin===origin||seenDomains.has(domainOf(url))||!name||name.length>100)continue;
     if(/\.(?:mp4|m3u8|png|jpe?g|gif|webp|zip|pdf)(?:$|[?#])/i.test(rawUrl))continue;
-    const context=(a.closest('aside,nav,footer,section,div,li')?.textContent||'').slice(0,500),rel=String(a.getAttribute('rel')||''),signals=similarCandidateSignals(name,url,context,rel);
+    const context=(a.closest('aside,nav,footer,section,div,li')?.textContent||'').slice(0,500),rel=String(a.getAttribute('rel')||''),adContext=relatedLinkAdContext(a),signals=similarCandidateSignals(name,url,context,rel,adContext);
     if(signals.generic||signals.ad||signals.adHost)continue;
     const hinted=guessTypeFromText(name+' '+context,rawUrl),type='mixed',inferred=inferGenre({name,url,type:hinted}),sameGenre=inferred===genre;
     const relatedBox=!!a.closest('[class*="related"],[class*="recommend"],[class*="partner"],[class*="linklist"],[class*="links"]');
     const score=(signals.relation?5:0)+(relatedBox?2:0)+(sameGenre?2:0)+(name.length>=4?1:0);
     const candidate={...candidateFrom(url,name,type,{source:'external-link',image:relatedLinkImage(a,base),similarityScore:score}),genre:inferred,similarityScore:score,hintType:hinted};
-    if(!isSuitableSimilarCandidate(candidate,channel,context,rel))continue;
+    if(!isSuitableSimilarCandidate(candidate,channel,context,rel,adContext))continue;
     list.push(candidate);
   }
   return uniqueBy(list.sort((a,b)=>b.similarityScore-a.similarityScore),c=>domainOf(c.url)).slice(0,12);

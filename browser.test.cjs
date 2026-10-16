@@ -67,6 +67,19 @@ const articlePages=await page.evaluate(async()=>{
   const old=fetchText;fetchText=async u=>docs[u]||'';const out=await loadReadableArticlePages({title:'記事',url:'https://article-pages.example/a',type:'article'},5);fetchText=old;
   return {pages:out.pages,text:out.blocks.filter(x=>x.text).map(x=>x.text).join(' '),next:articleContinuationUrl(docs['https://article-pages.example/a'],'https://article-pages.example/a')};
 });assert.equal(articlePages.pages,3);assert.match(articlePages.text,/1ページ目/);assert.match(articlePages.text,/2ページ目/);assert.match(articlePages.text,/3ページ目/);assert.equal(articlePages.next,'https://article-pages.example/a?page=2');
+const recoveryRegression=await page.evaluate(()=>{
+  const related=html=>externalSiteCandidates(new DOMParser().parseFromString(html,'text/html'),'https://video.example/',state.channels[0]).map(x=>x.url);
+  return {
+    emptyUrls:['',null,undefined,'   '].map(x=>absoluteUrl(x,'https://video.example/')),
+    hlsLoaded:typeof Hls==='function',
+    siblings:related('<div class="related">関連サイト<li><a href="https://good.example/">ゲーム関連サイト</a></li><li>【PR】<a href="https://paid.example/">ゲーム紹介</a></li><li class="sponsored"><a href="https://sponsor.example/">ゲーム紹介</a></li><a rel="sponsored" href="https://rel-ad.example/">ゲーム紹介</a><a href="https://login.example/">ログイン</a></div>'),
+    labels:related('<div class="related">関連サイト<li><span>【PR】</span><a href="https://paid.example/">ゲーム紹介</a></li><li><a href="https://safe.example/">安全なゲームサイト</a></li></div>')
+  };
+});
+assert.deepEqual(recoveryRegression.emptyUrls,['','','','']);
+assert.equal(recoveryRegression.hlsLoaded,true);
+assert.deepEqual(recoveryRegression.siblings,['https://good.example/']);
+assert.deepEqual(recoveryRegression.labels,['https://safe.example/']);
 const fixtureRegression=await page.evaluate((fx)=>{
   const mk=(id,name,url)=>normalizeChannel({id,name,url,type:'mixed'});
   const video=parseHtml(fx.videoRanking,mk('fv','Video','https://fixture.example/'),'https://fixture.example/');
@@ -75,7 +88,7 @@ const fixtureRegression=await page.evaluate((fx)=>{
   const images=parseHtml(fx.imageGallery,mk('fi','Images','https://fixture.example/'),'https://fixture.example/');
   const mixed=parseHtml(fx.mixed,mk('fm','Mixed','https://fixture.example/'),'https://fixture.example/');
   return {
-    engine:!!window.MyMelterContentEngine,
+    engine:typeof MyMelterContentEngine!=='undefined'&&typeof MyMelterContentEngine.mergeItems==='function',
     videoKinds:video.map(mediaKind),videoMode:contentProfile(video).mode,
     articleText:article.blocks.filter(x=>x.text).map(x=>x.text).join(' '),
     threadComments:thread.blocks.filter(x=>x.kind==='comment').map(x=>x.text),
@@ -100,7 +113,7 @@ const commentsReader=await page.evaluate(()=>{
   return {commentCount:article.commentCount,kinds:article.blocks.map(x=>x.kind),comments:article.blocks.filter(x=>x.kind==='comment').map(x=>x.text),html:articleBlocksHTML(article)};
 });assert.ok(commentsReader.commentCount>=2);assert.ok(commentsReader.kinds.includes('comments-heading'));assert.match(commentsReader.comments.join(' '),/コメントA/);assert.match(commentsReader.html,/clean-reader-comment/);assert.doesNotMatch(commentsReader.comments.join(' '),/スポンサー広告/);
 const livedoorReader=await page.evaluate(()=>{
-  const html='<html><head><title>テスト記事</title></head><body><div class="article-body-inner">最初の本文です。<br>2行目の本文です。<br><br><div>さらに本文が続きます。広告ではない本文を十分な長さで追加します。</div><div class="sponsored">スポンサー広告</div><img src="/body.jpg" width="640" height="480"></div></body></html>';
+  const html='<html><head><title>テスト記事</title></head><body><div class="article-body-inner">最初の本文です。<br>2行目の本文です。<br><br><div>さらに本文が続きます。広告ではない本文を十分な長さで追加します。短い記事でも冒頭と途中の行を失わず読めることを確認します。この文章は八十文字以上の本文を持つ記事の検証用です。</div><div class="sponsored">スポンサー広告</div><img src="/body.jpg" width="640" height="480"></div></body></html>';
   const article=extractReadableArticle(html,'https://nwknews.example/archives/1.html','テスト記事');
   return {textLength:article.textLength,text:article.blocks.filter(x=>x.text).map(x=>x.text).join(' '),images:article.blocks.filter(x=>x.kind==='image').map(x=>x.src)};
 });assert.ok(livedoorReader.textLength>=80);assert.match(livedoorReader.text,/最初の本文/);assert.match(livedoorReader.text,/2行目/);assert.doesNotMatch(livedoorReader.text,/スポンサー広告/);assert.deepEqual(livedoorReader.images,['https://nwknews.example/body.jpg']);
@@ -110,7 +123,7 @@ const unified=await page.evaluate(()=>{
   const article=extractReadableArticle('<html><head><title>記事タイトル</title></head><body><header>ナビ</header><article><h1>記事タイトル</h1><p>これは読みたい本文です。十分な長さの本文をここに入れてReaderの抽出を確認します。</p><div class="sponsored">スポンサー広告です</div><img src="/photo.jpg" width="640" height="480"><p>本文の続きです。</p></article><footer>広告</footer></body></html>','https://news.example/a','記事A');
   return {items:items.map(x=>({title:x.title,type:x.type,image:x.image})),profile:contentProfile(items),articleText:article.blocks.filter(x=>x.text).map(x=>x.text).join(' '),articleImages:article.blocks.filter(x=>x.kind==='image').map(x=>x.src),normal1:normalizeSimilarSiteUrl('https://nukiru.com/posts/123'),normal2:normalizeSimilarSiteUrl('https://x.com/u/status/1'),normal3:normalizeSimilarSiteUrl('https://search.yahoo.co.jp/realtime/search?p=x')};
 });assert.equal(unified.items.length,2);assert.equal(unified.items[0].type,'article');assert.equal(unified.profile.mode,'article');assert.match(unified.articleText,/読みたい本文/);assert.doesNotMatch(unified.articleText,/スポンサー広告/);assert.deepEqual(unified.articleImages,['https://news.example/photo.jpg']);assert.equal(unified.normal1,'https://nukiru.com/');assert.equal(unified.normal2,'');assert.equal(unified.normal3,'');
-await page.evaluate(async()=>{const old=fetchText;fetchText=async()=>'<article><h1>内部Reader</h1><p>広告なしでMyMelter内に表示する本文です。十分な長さを確保してReader表示を確認します。もう少し本文を追加します。</p><div class="ad">広告テキスト</div></article>';await openArticleReader({title:'内部Reader',url:'https://article.example/a',type:'article'});fetchText=old;});await page.waitForFunction(()=>document.querySelector('#articleReaderDialog [data-clean-reader-body]')?.textContent.includes('MyMelter内'));assert.equal(await page.locator('#articleReaderDialog').isVisible(),true);assert.doesNotMatch(await page.locator('#articleReaderDialog [data-clean-reader-body]').textContent(),/広告テキスト/);await page.locator('#articleReaderDialog [data-clean-reader-close]').click();
+await page.evaluate(async()=>{const old=fetchText;fetchText=async()=>'<article><h1>内部Reader</h1><p>広告なしでMyMelter内に表示する本文です。十分な長さを確保してReader表示を確認します。もう少し本文を追加します。表示判定の八十文字を超える実際の本文を追加し、読み込み後の画面を確認するための文章を続けます。</p><div class="ad">広告テキスト</div></article>';await openArticleReader({title:'内部Reader',url:'https://article.example/a',type:'article'});fetchText=old;});await page.waitForFunction(()=>document.querySelector('#articleReaderDialog [data-clean-reader-body]')?.textContent.includes('MyMelter内'));assert.equal(await page.locator('#articleReaderDialog').isVisible(),true);assert.doesNotMatch(await page.locator('#articleReaderDialog [data-clean-reader-body]').textContent(),/広告テキスト/);await page.locator('#articleReaderDialog [data-clean-reader-close]').click();
 await page.evaluate(()=>{activeItems=[{title:'画像1',url:'https://img.example/1',image:'https://img.example/1.jpg',type:'image'},{title:'画像2',url:'https://img.example/2',image:'https://img.example/2.jpg',type:'image'}];openImageViewer(activeItems[0]);});assert.equal(await page.locator('#imageViewerDialog').isVisible(),true);assert.match(await page.locator('#imageViewerDialog [data-image-main]').getAttribute('src'),/1\.jpg/);await page.locator('#imageViewerDialog [data-image-next]').click();assert.match(await page.locator('#imageViewerDialog [data-image-main]').getAttribute('src'),/2\.jpg/);await page.locator('#imageViewerDialog [data-image-close]').click();
 const browserCombined=await page.evaluate(()=>{
   const ch=normalizeChannel({
