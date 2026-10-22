@@ -142,6 +142,7 @@ const articlePages=await page.evaluate(async()=>{
   const old=fetchText;fetchText=async u=>docs[u]||'';const out=await loadReadableArticlePages({title:'記事',url:'https://article-pages.example/a',type:'article'},5);fetchText=old;
   return {pages:out.pages,text:out.blocks.filter(x=>x.text).map(x=>x.text).join(' '),next:articleContinuationUrl(docs['https://article-pages.example/a'],'https://article-pages.example/a')};
 });assert.equal(articlePages.pages,3);assert.match(articlePages.text,/1ページ目/);assert.match(articlePages.text,/2ページ目/);assert.match(articlePages.text,/3ページ目/);assert.equal(articlePages.next,'https://article-pages.example/a?page=2');
+assert.equal(await page.evaluate(()=>APP_VERSION),'1.7.5');
 const genericDirectRegression=await page.evaluate(()=>{
   const ch=normalizeChannel({id:'general',name:'General Site',url:'https://sample.example/',type:'mixed'});
   const clips='<html><body><main>'+
