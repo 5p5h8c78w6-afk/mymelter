@@ -91,7 +91,7 @@ const fixtureRegression=await page.evaluate((fx)=>{
 assert.equal(fixtureRegression.engine,true);
 assert.equal(fixtureRegression.videoMode,'video');assert.ok(fixtureRegression.videoKinds.every(x=>x==='video'));
 assert.match(fixtureRegression.articleText,/標準的な記事本文/);assert.doesNotMatch(fixtureRegression.articleText,/関連記事 関連記事/);
-console.log('THREAD-FIXTURE',JSON.stringify(fixtureRegression.threadComments));assert.equal(fixtureRegression.threadComments.length,5);assert.match(fixtureRegression.threadComments[0],/最初のレス本文/);assert.match(fixtureRegression.threadComments[1],/二番目のレス本文/);
+assert.equal(fixtureRegression.threadComments.length,5);assert.match(fixtureRegression.threadComments[0],/最初のレス本文/);assert.match(fixtureRegression.threadComments[1],/二番目のレス本文/);
 assert.equal(fixtureRegression.imageMode,'image');assert.ok(fixtureRegression.imageKinds.every(x=>x==='image'));
 assert.equal(fixtureRegression.mixedMode,'mixed');assert.ok(fixtureRegression.mixedKinds.includes('video'));assert.ok(fixtureRegression.mixedKinds.includes('article'));assert.ok(fixtureRegression.mixedKinds.includes('image'));
 const groupedThread=await page.evaluate(()=>{
