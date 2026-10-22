@@ -1520,7 +1520,7 @@ async function openArticleReader(item){
     if(d._url!==item.url)return;
     d.querySelector('[data-clean-reader-domain]').textContent=domainOf(item.url)+(article.pages>1?' · '+article.pages+'ページ結合':'')+(article.commentCount?' · コメント'+article.commentCount+'件':'');
     d.querySelector('[data-clean-reader-title]').textContent=article.title||item.title||'記事';
-    body.innerHTML=article.textLength>=80?articleBlocksHTML(article):'<div class="empty-card">本文を十分に抽出できませんでした。右上または「元ページ」からSafariで開けます。</div>';
+    body.innerHTML=(article.textLength>=35||article.commentCount>0)?articleBlocksHTML(article):'<div class="empty-card">本文を十分に抽出できませんでした。右上または「元ページ」からSafariで開けます。</div>';
   }catch(e){
     if(d._url!==item.url)return;
     body.innerHTML=`<div class="empty-card"><strong>本文を取得できませんでした。</strong><br>${esc(e.message)}<br><br>元ページは右上または下のボタンから開けます。</div>`;
