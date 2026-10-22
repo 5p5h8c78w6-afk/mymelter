@@ -142,6 +142,34 @@ const articlePages=await page.evaluate(async()=>{
   const old=fetchText;fetchText=async u=>docs[u]||'';const out=await loadReadableArticlePages({title:'記事',url:'https://article-pages.example/a',type:'article'},5);fetchText=old;
   return {pages:out.pages,text:out.blocks.filter(x=>x.text).map(x=>x.text).join(' '),next:articleContinuationUrl(docs['https://article-pages.example/a'],'https://article-pages.example/a')};
 });assert.equal(articlePages.pages,3);assert.match(articlePages.text,/1ページ目/);assert.match(articlePages.text,/2ページ目/);assert.match(articlePages.text,/3ページ目/);assert.equal(articlePages.next,'https://article-pages.example/a?page=2');
+const genericDirectRegression=await page.evaluate(()=>{
+  const ch=normalizeChannel({id:'general',name:'General Site',url:'https://sample.example/',type:'mixed'});
+  const clips='<html><body><main>'+
+    '<div class="video-card"><a href="/watch/first"><img data-src="/first.jpg" src="data:image/gif;base64,AA" alt="First clip">First clip</a></div>'+
+    '<div class="video-card"><a href="/watch/second"><img data-src="/second.jpg" alt="Second clip">Second clip</a></div>'+
+    '</main></body></html>';
+  const videoCards=parseHtml(clips,ch,'https://sample.example/');
+  const article=parseHtml('<html><body><main><article class="post"><h2><a href="/story">Article P: A normal article</a></h2><img src="/thumb.jpg"><p>Ordinary commentary and summary.</p></article></main></body></html>',ch,'https://sample.example/');
+  const video=parseHtml('<html><body><main><section class="video-card"><a href="/watch/my-video"><video data-src="https://cdn.example/clip.mp4" poster="/poster.jpg"></video>Movie</a></section></main></body></html>',ch,'https://sample.example/');
+  const gallery=parseHtml('<html><body><main><div class="gallery"><a href="/large1.jpg"><img data-src="/lazy1.jpg" src="data:image/gif;base64,AAA" alt="Gallery 1"></a></div><div class="gallery"><a href="/large2.jpg"><picture><source srcset="/large2.webp 2x"><img src="data:image/gif;base64,AAA" alt="Gallery 2"></picture></a></div></main></body></html>',ch,'https://sample.example/');
+  const og=parseHtml('<html><head><title>Main movie</title><meta property="og:video:url" content="https://cdn.example/featured.mp4"><meta property="og:image" content="/featured.jpg"></head><body><main>Empty</main></body></html>',ch,'https://sample.example/watch/featured');
+  const rss=parseFeed(new DOMParser().parseFromString('<rss><channel><item><title>News with cover photo</title><link>https://sample.example/news</link><enclosure url="https://sample.example/image.jpg" type="image/jpeg"/></item></channel></rss>','application/xml'),ch,'https://sample.example/');
+  activeChannel=ch;activeItems=[];renderReader();
+  const recovery={original:!!document.querySelector('#readerContent [data-open-url]'),safari:!!document.querySelector('#readerContent [data-browser-import-target]')};
+  return {videoCards:videoCards.map(x=>({type:x.type,url:x.url,videoUrl:x.videoUrl,image:x.image})),article:article.map(x=>x.type),video:video.map(x=>({type:x.type,videoUrl:x.videoUrl,image:x.image})),gallery:gallery.map(x=>({type:x.type,image:x.image})),og:og.map(x=>({type:x.type,videoUrl:x.videoUrl})),rss:rss.map(x=>x.type),recovery,summary:videoAvailabilityLabel(videoCards)};
+});
+assert.deepEqual(genericDirectRegression.videoCards,[
+  {type:'video',url:'https://sample.example/watch/first',videoUrl:'',image:'https://sample.example/first.jpg'},
+  {type:'video',url:'https://sample.example/watch/second',videoUrl:'',image:'https://sample.example/second.jpg'}
+]);
+assert.deepEqual(genericDirectRegression.article,['article']);
+assert.deepEqual(genericDirectRegression.video,[{type:'video',videoUrl:'https://cdn.example/clip.mp4',image:'https://sample.example/poster.jpg'}]);
+assert.deepEqual(genericDirectRegression.gallery,[{type:'image',image:'https://sample.example/lazy1.jpg'},{type:'image',image:'https://sample.example/large2.webp'}]);
+assert.deepEqual(genericDirectRegression.og,[{type:'video',videoUrl:'https://cdn.example/featured.mp4'}]);
+assert.deepEqual(genericDirectRegression.rss,['article']);
+assert.deepEqual(genericDirectRegression.recovery,{original:true,safari:true});
+assert.match(genericDirectRegression.summary,/直接再生0・元ページ2/);
+
 const fixtureRegression=await page.evaluate((fx)=>{
   const mk=(id,name,url)=>normalizeChannel({id,name,url,type:'mixed'});
   const video=parseHtml(fx.videoRanking,mk('fv','Video','https://fixture.example/'),'https://fixture.example/');
