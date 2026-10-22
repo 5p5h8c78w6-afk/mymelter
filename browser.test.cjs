@@ -62,6 +62,37 @@ assert.deepEqual(twidlSynthetic.items.map(x=>x.image),['https://www.twi-dl.net/a
 assert.equal(twidlSynthetic.items[0].media,'https://video.twimg.com/demo/a.mp4');
 assert.equal(twidlSynthetic.items[1].media,'');
 
+
+const generalImport=await page.evaluate(async()=>{
+  const run=async(html,url)=>{
+    const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL(url);
+    const script=buildBrowserImportBookmarklet().slice('javascript:'.length);
+    const execute=new Function('document','location','alert','fetch','return '+script);
+    let error='';await execute(doc,loc,m=>error=String(m),async()=>({ok:false}));
+    if(!loc.hash.startsWith('#mmimport='))return {error,items:[]};
+    const data=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(loc.hash.slice(10))),c=>c.charCodeAt(0))));
+    return {error,items:[...data.i,...data.d].map(x=>({url:x.u,image:x.i,video:x.m,type:x.y,title:x.t}))};
+  };
+  const videoCard=await run('<html><head><title>Clips</title></head><body><main><div class="video-card"><a href="/watch/episode-7"><img data-src="/poster.jpg" alt="Episode 7">Watch Episode 7</a></div></main></body></html>','https://clips.example/');
+  const lazyGallery=await run('<html><body><section class="gallery"><figure><img data-src="/photo1.jpg" alt="Photo A" width="640" height="480"></figure><figure><picture><source srcset="/photo2.webp 2x"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Photo B" width="640" height="480"></picture></figure></section></body></html>','https://gallery.example/');
+  const htmlVideo=await run('<html><body><section class="clip"><video data-src="https://cdn.example/clip.mp4" poster="/clip.jpg"></video></section></body></html>','https://media.example/');
+  const jsonLd=await run('<html><head><title>VideoObject Test</title><script type="application/ld+json">{"@type":"VideoObject","name":"Structured clip","contentUrl":"https://cdn.example/structured.mp4","thumbnailUrl":"https://cdn.example/structured.jpg"}</script></head><body><main>hello</main></body></html>','https://structured.example/watch');
+  const article=await run('<html><body><main><article class="post"><h2><a href="/story">Important story</a></h2><img src="/thumb.jpg" width="320" height="220"><p>Ordinary article content and commentary.</p></article></main></body></html>','https://news.example/');
+  return {videoCard,lazyGallery,htmlVideo,jsonLd,article};
+});
+assert.equal(generalImport.videoCard.error,'');
+assert.equal(generalImport.videoCard.items.length,1);
+assert.equal(generalImport.videoCard.items[0].type,'video');
+assert.equal(generalImport.videoCard.items[0].video,'');
+assert.equal(generalImport.videoCard.items[0].url,'https://clips.example/watch/episode-7');
+assert.equal(generalImport.videoCard.items[0].image,'https://clips.example/poster.jpg');
+assert.deepEqual(generalImport.lazyGallery.items.map(x=>x.type),['image','image']);
+assert.deepEqual(generalImport.lazyGallery.items.map(x=>x.image),['https://gallery.example/photo1.jpg','https://gallery.example/photo2.webp']);
+assert.equal(generalImport.htmlVideo.items[0].video,'https://cdn.example/clip.mp4');
+assert.equal(generalImport.htmlVideo.items[0].type,'video');
+assert.equal(generalImport.jsonLd.items[0].video,'https://cdn.example/structured.mp4');
+assert.deepEqual(generalImport.article.items.map(x=>x.type),['article']);
+
 const bookmarklet=await page.evaluate(()=>buildBrowserImportBookmarklet());assert.match(bookmarklet,/v:23/);assert.ok(bookmarklet.includes("if(!u||!String(u).trim())return''"));assert.match(bookmarklet,/iframeDoc\(cat\.u,850\)/);assert.match(bookmarklet,/liveVideos>videoCount/);assert.match(bookmarklet,/collectCategories/);assert.match(bookmarklet,/c:C\.slice\(0,16\)/);assert.match(bookmarklet,/g:GS/);assert.match(bookmarklet,/snapshotDocItems/);assert.match(bookmarklet,/compactItems/);assert.match(bookmarklet,/discoverNextPage/);assert.match(bookmarklet,/autoPages<5/);assert.match(bookmarklet,/m:'web-search'/);assert.match(bookmarklet,/collectSearchResults/);assert.match(bookmarklet,/parseArticles\(doc,base\);\s*parseImages\(doc,base\);/);assert.match(bookmarklet,/twidouga\\\.net/);assert.match(bookmarklet,/parseTw\(doc,base\)/);assert.doesNotMatch(bookmarklet,/if\(I\.length===before\)parseArticles/);assert.match(bookmarklet,/e:E\.slice\(0,30\)/);assert.match(bookmarklet,/sc:score/);assert.match(bookmarklet,/i:im/);assert.doesNotThrow(()=>new Function(bookmarklet.slice('javascript:'.length)));
 const safariSimilar=await page.evaluate(async()=>{let calls=0;const old=fetchText;fetchText=async()=>{calls++;throw Error('browser similar must not fetch');};const ch=normalizeChannel({id:'safari-fixture',name:'Safari',url:'https://blocked.example/',type:'video',source:'browser',browserSourceUrl:'https://blocked.example/',relatedSitesVersion:14,relatedSites:[{name:'関連動画',url:'https://related.example/',image:'https://blocked.example/related.jpg',similarityScore:5,type:'video',genre:'動画'},{name:'【PR】広告',url:'https://ads.example/',similarityScore:9,type:'mixed'}]});state.channels.push(ch);await runSimilarDiscovery(ch);const out={calls,status:document.querySelector('#discoverStatus').textContent,items:state.candidates.map(x=>({url:x.url,image:x.image}))};state.channels=state.channels.filter(x=>x.id!==ch.id);fetchText=old;if(document.querySelector('#discoverDialog').open)document.querySelector('#discoverDialog').close();return out;});assert.equal(safariSimilar.calls,0);assert.deepEqual(safariSimilar.items,[{url:'https://related.example/',image:'https://blocked.example/related.jpg'}]);assert.match(safariSimilar.status,/広告・PR/);
 const safariLegacy=await page.evaluate(async()=>{let calls=0;const old=fetchText;fetchText=async()=>{calls++;throw Error('legacy browser similar must not fetch');};const ch=normalizeChannel({id:'safari-old',name:'Safari旧版',url:'https://blocked-old.example/',source:'browser',browserSourceUrl:'https://blocked-old.example/',relatedSitesVersion:13,relatedSites:[]});state.channels.push(ch);await runSimilarDiscovery(ch);const out={calls,reimport:!!document.querySelector('[data-browser-import-target="https://blocked-old.example/"]'),status:document.querySelector('#discoverStatus').textContent};state.channels=state.channels.filter(x=>x.id!==ch.id);fetchText=old;if(document.querySelector('#discoverDialog').open)document.querySelector('#discoverDialog').close();return out;});assert.equal(safariLegacy.calls,0);assert.equal(safariLegacy.reimport,true);assert.match(safariLegacy.status,/最新版/);
