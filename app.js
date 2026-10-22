@@ -1259,7 +1259,7 @@ function consumeBrowserImportHash(){
     if(channel){
       const primary=items.length?items:(channel.snapshotItems||[]);
       const deep=deepItems.length?deepItems:(channel.deepDiveItems||[]);
-      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.categoryTabs=categoryTabs.length?categoryTabs:(channel.categoryTabs||[]); channel.categorySnapshots=MyMelterContentEngine.normalizeCategorySnapshots(Object.keys(categorySnapshots).length?{...(channel.categorySnapshots||{}),...categorySnapshots}:(channel.categorySnapshots||{})); channel.snapshotItems=MyMelterContentEngine.mergeItems(primary); channel.deepDiveItems=MyMelterContentEngine.mergeItems(deep); channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.updatedAt=Date.now();
+      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.categoryTabs=categoryTabs.length?categoryTabs:(channel.categoryTabs||[]); channel.categorySnapshots=MyMelterContentEngine.normalizeCategorySnapshots(Object.keys(categorySnapshots).length?{...(channel.categorySnapshots||{}),...categorySnapshots}:(channel.categorySnapshots||{})); channel.snapshotItems=MyMelterContentEngine.mergeItems((channel.snapshotItems||[]).filter(old=>primary.some(item=>item.url===old.url)),primary); channel.deepDiveItems=MyMelterContentEngine.mergeItems(deep); channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.updatedAt=Date.now();
       const unified=MyMelterContentEngine.channelItems(channel);channel.itemCount=unified.length;if(!channel.typeLocked)channel.type=MyMelterContentEngine.profile(unified).mode;
       unified.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       rememberItems(unified);
@@ -1520,7 +1520,8 @@ async function checkVideoCandidate(item,button,force=false){
     // Keep the existing gallery intact until the user explicitly closes this dialog.
   }catch(e){
     if(d._checkToken!==token)return;
-    const msg=/HTTP 40[13]/.test(String(e?.message||''))?'サイトが取得を制限しています。':e?.name==='AbortError'?'詳細ページの取得がタイムアウトしました。':'詳細ページを読み込めませんでした。';
+    const crossOrigin=(()=>{try{return new URL(item.url).origin!==location.origin}catch{return false}})();
+    const msg=/HTTP 40[13]/.test(String(e?.message||''))?'サイトが取得を制限しています。':e?.name==='AbortError'?'詳細ページの取得がタイムアウトしました。':crossOrigin&&!state.settings.proxyUrl?'このサイトの詳細ページはMyMelterから直接取得できません。Safari取り込みv27で取得をお試しください。':'詳細ページを読み込めませんでした。';
     renderVideoEvidenceDialog(d,item,msg+' Safariの元ページから確認してください。',false);
   }finally{
     if(d._checkToken===token)d.querySelector('[data-evidence-retry]').disabled=false;
