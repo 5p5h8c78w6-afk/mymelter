@@ -140,6 +140,15 @@ const rankingPriority=await page.evaluate(()=>{
   ];
   return prioritizeImportedItems(items).map(x=>x.id);
 });assert.deepEqual(rankingPriority,['r1','r2','other']);
+const sharedRankMedia=await page.evaluate(()=>{
+  const ch=normalizeChannel({id:'shared-ranked',name:'ランキング',url:'https://rank.example/',type:'video',deepDiveItems:[
+    {id:'second',title:'第2位',url:'https://posts.example/2',videoUrl:'https://cdn.example/shared.mp4',type:'video',browserRank:'2'},
+    {id:'first',title:'第1位',url:'https://posts.example/1',videoUrl:'https://cdn.example/shared.mp4',type:'video',browserRank:'1'}
+  ]});
+  const items=browserChannelItems(ch);
+  return {ranks:items.map(x=>x.browserRank),urls:items.map(x=>x.url),mode:contentProfile(items).mode};
+});assert.deepEqual(sharedRankMedia.ranks,['1','2']);assert.deepEqual(sharedRankMedia.urls,['https://posts.example/1','https://posts.example/2']);assert.equal(sharedRankMedia.mode,'video');
+
 const cachedCategory=await page.evaluate(async()=>{
   const c1='https://video-cat.example/new',c2='https://video-cat.example/ranking';
   const ch=normalizeChannel({id:'cached-cat',name:'Cached',url:c1,type:'video',categoryTabs:[{name:'新着',url:c1},{name:'ランキング',url:c2}],categorySnapshots:{[c2]:[{id:'rank1',title:'第1位',url:'https://x.com/r1',videoUrl:'https://cdn.example/r1.mp4',image:'https://cdn.example/r1.jpg',type:'video',browserRank:'1'}]}});
