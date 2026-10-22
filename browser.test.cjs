@@ -88,7 +88,7 @@ const fixtureRegression=await page.evaluate((fx)=>{
     mixedKinds:mixed.map(mediaKind),mixedMode:contentProfile(mixed).mode
   };
 },FIXTURES);
-assert.equal(fixtureRegression.engine,true);
+console.log('fixture diagnostic',JSON.stringify(fixtureRegression));assert.equal(fixtureRegression.engine,true);
 assert.equal(fixtureRegression.videoMode,'video');assert.ok(fixtureRegression.videoKinds.every(x=>x==='video'));
 assert.match(fixtureRegression.articleText,/標準的な記事本文/);assert.doesNotMatch(fixtureRegression.articleText,/関連記事 関連記事/);
 console.log('fixture thread comments',JSON.stringify(fixtureRegression.threadComments));assert.equal(fixtureRegression.threadComments.length,5);assert.match(fixtureRegression.threadComments[0],/最初のレス本文/);assert.match(fixtureRegression.threadComments[1],/二番目のレス本文/);
