@@ -114,4 +114,5 @@ const MyMelterContentEngine=(()=>{
   }
   return {cleanUrl,kind,normalize,key,mergeItems,profile,channelItems,normalizeCategorySnapshots,hasPlayableVideo,diagnostics};
 })();
+if(typeof window!=='undefined')window.MyMelterContentEngine=MyMelterContentEngine;
 if(typeof module!=='undefined')module.exports=MyMelterContentEngine;
