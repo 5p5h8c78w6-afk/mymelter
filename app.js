@@ -69,7 +69,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 function clone(v){ return JSON.parse(JSON.stringify(v)); }
 function uid(){ return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function esc(v=''){ return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-function absoluteUrl(url, base){ try { return new URL(url, base).href; } catch { return ''; } }
+function absoluteUrl(url, base){ if(typeof url!=='string'||!url.trim())return ''; try { const u=new URL(url,base); return /^https?:$/.test(u.protocol)?u.href:''; } catch { return ''; } }
 function domainOf(url){ try { return new URL(url).hostname.replace(/^www\./,''); } catch { return ''; } }
 function normalizeUrl(url){ try { const u = new URL(url); if(!/^https?:$/.test(u.protocol)) return ''; u.hash=''; return u.href; } catch { return ''; } }
 function fmtDate(ts){ if(!ts) return ''; try { return new Intl.DateTimeFormat('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(ts)); } catch { return ''; } }
