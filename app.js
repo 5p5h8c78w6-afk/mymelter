@@ -1328,6 +1328,7 @@ function groupThreadCommentLines(lines=[]){
   for(const raw of lines){
     const line=String(raw||'').replace(/\s+/g,' ').trim();if(!line)continue;
     if(stop.test(line)){if(cur)flush();if(groups.length)break;continue;}
+    if(/^>{1,2}\d+\b/.test(line)&&cur){cur.body.push(line);continue;}
     if(isCommentLikeText(line)){
       flush();cur={head:line,body:[]};continue;
     }
