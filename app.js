@@ -797,7 +797,21 @@ var collectRelated=function(doc,base){
     ES[host]=1;E.push({n:n,u:p.href,i:im,sc:score});
   })
 };
-var D=function(t,u,p,m,r,k,y,e){u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;var key=k||m||u;if(!u||u.indexOf('http')!==0||!key||S[key])return;S[key]=1;I.push({t:(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||'',y:y||'',e:(e||'').slice(0,800)})};
+var D=function(t,u,p,m,r,k,y,e){
+  u=A(u);p=A(p);m=A(m);if(!u&&m)u=m;
+  var key=k||m||u;if(!u||!key)return;
+  var idx=!r?S['url:'+u]:0,previous=idx?I[idx-1]:null;
+  if(previous&&!previous.r){
+    if(!previous.i&&p)previous.i=p;
+    if(!previous.m&&m&&previous.y!=='article')previous.m=m;
+    if(y==='video'&&previous.y!=='article')previous.y='video';
+    if((!previous.t||previous.t==='無題')&&t)previous.t=String(t).slice(0,220);
+    S[key]=1;return
+  }
+  if(S[key])return;
+  I.push({t:String(t||'無題').slice(0,220),u:u,i:p||'',m:m||'',r:r||'',y:y||'',e:String(e||'').slice(0,800)});
+  S[key]=1;if(!r)S['url:'+u]=I.length
+};
 var collect=function(txt,pat){var out=[],re=new RegExp(pat,'g'),m;while((m=re.exec(String(txt||'')))!==null){out.push(m[0]);if(!m[0])re.lastIndex++}return out};
 var texts=function(doc){var body=X(doc.body),r=[],sv=[],m,re1=new RegExp('第\\\\s*(\\\\d+)\\\\s*位','g'),re2=new RegExp('(\\\\d+)\\\\s*回保存','g');while((m=re1.exec(body))!==null)r.push(m[1]);while((m=re2.exec(body))!==null)sv.push(m[1]);return{r:r,s:sv}};
 var postList=function(doc,base){return [].slice.call(doc.querySelectorAll('a[href*="x.com/"][href*="/status/"],a[href*="twitter.com/"][href*="/status/"],a[href*="twitter.com/i/status/"]')).map(function(a){return{u:A(a.getAttribute('href'),base),t:X(a)}})};
