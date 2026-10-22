@@ -140,6 +140,15 @@ const rankingPriority=await page.evaluate(()=>{
   ];
   return prioritizeImportedItems(items).map(x=>x.id);
 });assert.deepEqual(rankingPriority,['r1','r2','other']);
+const sharedRankMedia=await page.evaluate(()=>{
+  const ch=normalizeChannel({id:'shared-ranked',name:'ランキング',url:'https://rank.example/',type:'video',deepDiveItems:[
+    {id:'second',title:'第2位',url:'https://posts.example/2',videoUrl:'https://cdn.example/shared.mp4',type:'video',browserRank:'2'},
+    {id:'first',title:'第1位',url:'https://posts.example/1',videoUrl:'https://cdn.example/shared.mp4',type:'video',browserRank:'1'}
+  ]});
+  const items=browserChannelItems(ch);
+  return {ranks:items.map(x=>x.browserRank),urls:items.map(x=>x.url),mode:contentProfile(items).mode};
+});assert.deepEqual(sharedRankMedia.ranks,['1','2']);assert.deepEqual(sharedRankMedia.urls,['https://posts.example/1','https://posts.example/2']);assert.equal(sharedRankMedia.mode,'video');
+
 const cachedCategory=await page.evaluate(async()=>{
   const c1='https://video-cat.example/new',c2='https://video-cat.example/ranking';
   const ch=normalizeChannel({id:'cached-cat',name:'Cached',url:c1,type:'video',categoryTabs:[{name:'新着',url:c1},{name:'ランキング',url:c2}],categorySnapshots:{[c2]:[{id:'rank1',title:'第1位',url:'https://x.com/r1',videoUrl:'https://cdn.example/r1.mp4',image:'https://cdn.example/r1.jpg',type:'video',browserRank:'1'}]}});
@@ -208,5 +217,5 @@ await page.route('https://fixture.example/**',route=>route.fulfill({status:200,c
 await page.evaluate(()=>{fetchText=async()=> '#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:3,\npart.ts\n#EXT-X-ENDLIST';return openQualityPicker({title:'fixture',videoUrl:'https://fixture.example/video.m3u8'},null,true);});
 const downloadEvent=page.waitForEvent('download');await page.locator('[data-quality-start]').click();const download=await downloadEvent;assert.equal(download.suggestedFilename(),'fixture.zip');const zip=fs.readFileSync(await download.path());assert.equal(zip.readUInt32LE(0),0x04034b50);assert.ok(zip.includes(Buffer.from('playlist.m3u8')));assert.ok(zip.includes(Buffer.from('media-00000.ts')));assert.ok(zip.includes(Buffer.from([0x47,0x01,0x02])));
 await page.evaluate(()=>{navigate('channels');state.ui.channelGenre='all';renderChannelManager();});await page.screenshot({path:__dirname+'/../channels-mobile.png',fullPage:true});
-assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.0 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v21 fallback, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
+assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.1 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v22 fallback, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
