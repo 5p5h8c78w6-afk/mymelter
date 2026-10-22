@@ -638,3 +638,12 @@ main,.view,.channel-list{max-width:100%;min-width:0}
 .video-gallery-meta .video-gallery-save{width:auto;min-width:32px;padding:5px 7px;min-height:32px;flex:0 1 auto}
 #videoEvidenceDialog .sheet{overflow-y:auto}
 #videoEvidenceDialog [data-evidence-status]{line-height:1.6;white-space:normal;overflow-wrap:anywhere}
+
+
+/* 1.8.0: one-tap video feed, informative link-only fallback. */
+.video-fallback{position:relative;overflow:hidden}
+.video-missing-source{position:relative;z-index:5;background:rgba(8,18,33,.88);border-radius:16px;padding:16px;max-width:min(86vw,360px);line-height:1.55;text-align:center}
+.video-missing-source strong{display:block;font-size:15px}
+.video-missing-source p{font-size:12px;margin:8px 0}
+.video-missing-source button{position:relative;z-index:8;border:0;background:#fff;color:#213b5a;border-radius:12px;padding:10px 14px;font-weight:750}
+.video-error-panel [data-feed-source-open]{margin-left:5px}
