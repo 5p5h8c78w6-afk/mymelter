@@ -1147,12 +1147,22 @@ function activeVideoItems(){
   }):[];
   return [...primary,...deep];
 }
+function activeVideoCandidates(){
+  const all=(activeItems||[]).filter(x=>mediaKind(x)==='video');
+  const seen=new Set(all.map(x=>(x.browserRank||'')+'|'+(x.url||x.videoUrl||'')));
+  const deep=(activeChannel?.deepDiveItems||[]).filter(x=>{
+    if(mediaKind(x)!=='video')return false;
+    const key=(x.browserRank||'')+'|'+(x.url||x.videoUrl||'');
+    if(seen.has(key))return false;seen.add(key);return true;
+  });
+  return [...all,...deep];
+}
 function setReaderMode(mode,render=true){ activeReaderMode=mode; $$('#readerModeTabs button').forEach(b=>b.classList.toggle('active',b.dataset.readerMode===mode)); if(render)renderReader(); }
 function renderReader(){
   const root=$('#readerContent'); if(!activeItems.length){root.innerHTML=`<div class="empty-card">表示できる項目がありません。</div>`;return;}
   if(activeReaderMode==='video'){
-    const vids=activeVideoItems();
-    root.innerHTML=videoCategoryStripHTML()+ (vids.length?`<div class="video-gallery">${vids.map((x,i)=>videoGalleryItemHTML(x,i)).join('')}</div>`:`<div class="empty-card">この一覧から直接再生できる動画URLは見つかりませんでした。</div>`); return;
+    const vids=activeVideoCandidates();
+    root.innerHTML=videoCategoryStripHTML()+ (vids.length?`<div class="video-gallery">${vids.map((x,i)=>videoGalleryItemHTML(x,i)).join('')}</div>`:`<div class="empty-card">この一覧に動画の候補は見つかりませんでした。</div>`); return;
   }
   if(activeReaderMode==='media'){
     const media=activeItems.filter(x=>x.image||x.videoUrl);
@@ -1165,9 +1175,9 @@ function videoGalleryItemHTML(x,i){
   const saved=isSavedUrl(x.url);
   return `<article class="video-gallery-card">
     <button type="button" class="video-gallery-open" data-video-gallery-open="${i}" aria-label="${esc(x.title||'動画')}">
-      ${poster}<span class="video-gallery-play">▶</span>
+      ${poster}<span class="video-gallery-play">${x.videoUrl?'▶':'↗'}</span>
     </button>
-    <div class="video-gallery-meta"><strong>${esc(x.title||'動画')}</strong><button type="button" class="video-gallery-save" data-video-gallery-save="${i}" aria-label="保存">${saved?'♥':'♡'}</button></div>
+    <div class="video-gallery-meta"><strong>${esc(x.title||'動画')}${x.videoUrl?'':'（元ページ）'}</strong><button type="button" class="video-gallery-save" data-video-gallery-save="${i}" aria-label="保存">${saved?'♥':'♡'}</button></div>
   </article>`;
 }
 function contentItemHTML(x,i){
@@ -1613,6 +1623,11 @@ function openItem(item){
   if(kind==='video'&&item.videoUrl){
     recordHistory(item,false);
     openVideoFeedItems([item],item.channelName||'動画');
+    return;
+  }
+  if(kind==='video'&&item.url){
+    recordHistory(item,false);
+    window.open(item.url,'_blank','noopener');
     return;
   }
   if(item.url)openArticleReader(item);
@@ -2253,8 +2268,8 @@ document.addEventListener('click',async e=>{
   const addAll=e.target.closest('[data-add-all-candidates]'); if(addAll){addAllCandidates();return;}
   const prevC=e.target.closest('[data-preview-candidate]'); if(prevC){const c=state.candidates.find(x=>x.id===prevC.dataset.previewCandidate);if(c)openChannel(normalizeChannel(c));return;}
   const categoryTab=e.target.closest('[data-video-category]'); if(categoryTab){await loadVideoCategory(Number(categoryTab.dataset.videoCategory));return;}
-  const galleryOpen=e.target.closest('[data-video-gallery-open]'); if(galleryOpen){const vids=activeVideoItems();const i=Number(galleryOpen.dataset.videoGalleryOpen);if(vids[i]){recordHistory(vids[i],false);openVideoFeedItems(vids,activeChannel?.name||'動画',i);}return;}
-  const gallerySave=e.target.closest('[data-video-gallery-save]'); if(gallerySave){const vids=activeVideoItems();const i=Number(gallerySave.dataset.videoGallerySave);if(vids[i]){const saved=toggleSavedItem(vids[i]);gallerySave.textContent=saved?'♥':'♡';}return;}
+  const galleryOpen=e.target.closest('[data-video-gallery-open]'); if(galleryOpen){const candidates=activeVideoCandidates(),x=candidates[Number(galleryOpen.dataset.videoGalleryOpen)];if(x){if(!x.videoUrl){openItem(x);}else{const playable=activeVideoItems();let i=playable.findIndex(y=>y.id===x.id||(y.url===x.url&&y.videoUrl===x.videoUrl));if(i<0){playable.unshift(x);i=0;}recordHistory(x,false);openVideoFeedItems(playable,activeChannel?.name||'動画',i);}}return;}
+  const gallerySave=e.target.closest('[data-video-gallery-save]'); if(gallerySave){const vids=activeVideoCandidates();const i=Number(gallerySave.dataset.videoGallerySave);if(vids[i]){const saved=toggleSavedItem(vids[i]);gallerySave.textContent=saved?'♥':'♡';}return;}
   const activeOpen=e.target.closest('[data-active-open]'); if(activeOpen){openActiveItem(Number(activeOpen.dataset.activeOpen));return;}
   const activeSave=e.target.closest('[data-active-save]'); if(activeSave){toggleSavedItem(activeItems[Number(activeSave.dataset.activeSave)],activeSave);return;}
   const activeQuick=e.target.closest('[data-active-quick-save]'); if(activeQuick){await prepareDeviceSave(activeItems[Number(activeQuick.dataset.activeQuickSave)]);return;}
