@@ -10,21 +10,29 @@ const MyMelterContentEngine=(()=>{
     if(explicit==='article'||explicit==='feed')return'article';
     if(explicit==='video')return'video';
     if(explicit==='image')return'image';
-    if(item.videoUrl)return'video';
-    if(item.image)return'image';
+    if(cleanUrl(item.videoUrl))return'video';
+    if(cleanUrl(item.image))return'image';
     return'article';
   }
   function normalize(item={},seq=0){
     const out={...item};
     out.url=cleanUrl(out.url)||String(out.url||'');
-    out.videoUrl=cleanUrl(out.videoUrl)||String(out.videoUrl||'');
-    out.image=cleanUrl(out.image)||String(out.image||'');
+    out.videoUrl=cleanUrl(out.videoUrl);
+    out.image=cleanUrl(out.image);
     out.type=kind(out);
     out.browserRank=/^\d+$/.test(String(out.browserRank||''))?String(Number(out.browserRank)):'';
     out._seq=seq;
     return out;
   }
+  function rankKey(item={}){
+    const rank=Number(item.browserRank||0);
+    if(kind(item)!=='video'||!Number.isSafeInteger(rank)||rank<1)return'';
+    const identity=cleanUrl(item.url)||cleanUrl(item.videoUrl)||String(item.id||'');
+    return identity?'r:'+rank+':'+identity:'';
+  }
   function key(item={}){
+    const ranked=rankKey(item);
+    if(ranked)return ranked;
     const k=kind(item);
     if(k==='video'&&cleanUrl(item.videoUrl))return'v:'+cleanUrl(item.videoUrl);
     if(cleanUrl(item.url))return'u:'+cleanUrl(item.url);
@@ -48,7 +56,10 @@ const MyMelterContentEngine=(()=>{
     const flat=groups.flat(Infinity).filter(Boolean).map((x,i)=>normalize(x,i));
     const map=new Map(),aliases=new Map();
     for(const item of flat){
-      const ks=[key(item),cleanUrl(item.url)?'u:'+cleanUrl(item.url):'',cleanUrl(item.videoUrl)?'v:'+cleanUrl(item.videoUrl):''].filter(Boolean);
+      // Ranked entries are distinct even when the provider reuses a media URL.
+      // Do not attach the shared video URL as an alias for a ranked entry.
+      const ranked=rankKey(item);
+      const ks=ranked?[ranked]:[key(item),cleanUrl(item.url)?'u:'+cleanUrl(item.url):'',cleanUrl(item.videoUrl)?'v:'+cleanUrl(item.videoUrl):''].filter(Boolean);
       let found=null;
       for(const k of ks){if(aliases.has(k)){found=aliases.get(k);break}}
       if(found&&map.has(found)){
@@ -57,6 +68,18 @@ const MyMelterContentEngine=(()=>{
       }else{
         const primary=ks[0]||('seq:'+item._seq);map.set(primary,item);
         for(const k of ks)aliases.set(k,primary);
+      }
+    }
+    // Legacy/unranked evidence of a ranked video can enrich one rank entry,
+    // but must not create an extra duplicate card beside the ranking.
+    for(const [unrankedKey,item] of map){
+      if(rankKey(item)||kind(item)!=='video')continue;
+      const media=cleanUrl(item.videoUrl);
+      if(!media)continue;
+      const match=[...map].find(([k,x])=>k!==unrankedKey&&!!rankKey(x)&&cleanUrl(x.videoUrl)===media);
+      if(match){
+        map.set(match[0],mergePair(match[1],item));
+        map.delete(unrankedKey);
       }
     }
     let out=[...map.values()];
