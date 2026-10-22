@@ -11,6 +11,11 @@ const FIXTURES={
 try{browser=await chromium.launch({headless:true,...(process.env.MYMELTER_BROWSER_CHANNEL?{channel:process.env.MYMELTER_BROWSER_CHANNEL}:{})});const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.addInitScript(()=>localStorage.setItem('mymelter-state-v2',JSON.stringify({channels:[{id:'a',name:'動画サイト',type:'video',url:'https://video.example/',createdAt:123,custom:'keep'},{id:'b',name:'技術ブログ',type:'article',url:'https://tech.example/',genre:'ブログ'}],saved:[{url:'https://saved.example/',title:'保存'}],settings:{proxyUrl:'',proxyKey:'keep-key'}})));
 await page.goto('http://127.0.0.1:'+server.address().port);await page.evaluate(()=>navigate('channels'));
+const emptyChannelKind=await page.evaluate(()=>({
+  explicit:normalizeChannel({id:'empty-explicit',name:'動画サイト',url:'https://empty.example/',type:'video'}).type,
+  auto:normalizeChannel({id:'empty-mixed',name:'空のサイト',url:'https://empty.example/',type:'mixed'}).type
+}));
+assert.equal(emptyChannelKind.explicit,'video');assert.equal(emptyChannelKind.auto,'mixed');
 assert.equal(await page.locator('.manager-card').count(),2);assert.equal(await page.locator('#channelGenreFilters button').count(),12);
 await page.locator('[data-genre-filter="動画"]').click();assert.equal(await page.locator('.manager-card').count(),1);
 await page.locator('[data-edit-channel="a"]').click();
