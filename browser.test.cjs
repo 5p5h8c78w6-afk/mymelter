@@ -84,7 +84,7 @@ const fixtureRegression=await page.evaluate((fx)=>{
     videoKinds:video.map(mediaKind),videoMode:contentProfile(video).mode,
     articleText:article.blocks.filter(x=>x.text).map(x=>x.text).join(' '),
     threadComments:thread.blocks.filter(x=>x.kind==='comment').map(x=>x.text),
-    imageKinds:images.map(mediaKind),imageMode:contentProfile(images).mode,
+    imageKinds:images.map(mediaKind),imageMode:contentProfile(images).mode,imageDetails:images.map(x=>({title:x.title,url:x.url,videoUrl:x.videoUrl,image:x.image,type:x.type})),
     mixedKinds:mixed.map(mediaKind),mixedMode:contentProfile(mixed).mode
   };
 },FIXTURES);
@@ -92,7 +92,7 @@ assert.equal(fixtureRegression.engine,true);
 assert.equal(fixtureRegression.videoMode,'video');assert.ok(fixtureRegression.videoKinds.every(x=>x==='video'));
 assert.match(fixtureRegression.articleText,/標準的な記事本文/);assert.doesNotMatch(fixtureRegression.articleText,/関連記事 関連記事/);
 assert.equal(fixtureRegression.threadComments.length,5);assert.match(fixtureRegression.threadComments[0],/最初のレス本文/);assert.match(fixtureRegression.threadComments[1],/二番目のレス本文/);
-console.log('IMG-FIXTURE',JSON.stringify({mode:fixtureRegression.imageMode,kinds:fixtureRegression.imageKinds}));assert.equal(fixtureRegression.imageMode,'image');assert.ok(fixtureRegression.imageKinds.every(x=>x==='image'));
+console.log('IMG-FIXTURE',JSON.stringify({mode:fixtureRegression.imageMode,kinds:fixtureRegression.imageKinds,details:fixtureRegression.imageDetails}));assert.equal(fixtureRegression.imageMode,'image');assert.ok(fixtureRegression.imageKinds.every(x=>x==='image'));
 assert.equal(fixtureRegression.mixedMode,'mixed');assert.ok(fixtureRegression.mixedKinds.includes('video'));assert.ok(fixtureRegression.mixedKinds.includes('article'));assert.ok(fixtureRegression.mixedKinds.includes('image'));
 const groupedThread=await page.evaluate(()=>{
   const html='<html><body><main><div class="sidebar">人気記事 次の記事 関連記事 いっぱい</div><div class="article-body-inner"><div>1: 以下、ニュー速クオリティでお送りします 2026/08/01 ID:AAA111</div><div>最初のレス本文です。メガネの話を続けます。</div><div>2: 以下、ニュー速クオリティでお送りします 2026/08/01 ID:BBB222</div><div>&gt;&gt;1 二つ目のレス本文です。</div><div>3: 以下、ニュー速クオリティでお送りします 2026/08/01 ID:CCC333</div><div>三つ目のレス本文です。</div><div>引用元：</div></div></main></body></html>';
