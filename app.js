@@ -1,4 +1,4 @@
-const APP_VERSION = '1.7.2';
+const APP_VERSION = '1.7.3';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -912,7 +912,7 @@ var iframeDoc=async function(url,settle){return await new Promise(function(resol
 if(WEBSEARCH){
   collectSearchResults(document,location.href);
   if(!E.length){alert('MyMelter: Web検索結果から候補を検出できませんでした');return}
-  var WP={v:23,m:'web-search',s:location.href,n:document.title,q:(new URL(location.href)).searchParams.get('q')||'',i:[],d:[],e:E.slice(0,30),c:C.slice(0,16),g:[]};
+  var WP={v:24,m:'web-search',s:location.href,n:document.title,q:(new URL(location.href)).searchParams.get('q')||'',i:[],d:[],e:E.slice(0,30),c:C.slice(0,16),g:[]};
   var WJ=JSON.stringify(WP),WB=new TextEncoder().encode(WJ),WQ='';for(var wi=0;wi<WB.length;wi++)WQ+=String.fromCharCode(WB[wi]);
   location.href=R+'#mmimport='+encodeURIComponent(btoa(WQ));return
 }
@@ -1017,7 +1017,7 @@ for(var ci=0;ci<cats.length;ci++){
   if(catItems.length)GS.push({n:cat.n,u:cat.u,i:compactItems(catItems).slice(0,16)});
 }
 if(!primary.length&&!deep.length){alert('MyMelter: 現在のページから記事・画像・動画の候補を取得できませんでした。ページを最後まで表示した後、もう一度実行してください。ログイン・取得制限・埋め込みサイトの場合は元ページからの直接取得が必要なことがあります。');return}
-var P={v:23,m:'site',s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30),c:C.slice(0,16),g:GS};
+var P={v:24,m:'site',s:location.href,n:document.title,i:primary,d:deep,e:E.slice(0,30),c:C.slice(0,16),g:GS};
 var J=JSON.stringify(P),B=new TextEncoder().encode(J),Q='';
 for(var k=0;k<B.length;k++)Q+=String.fromCharCode(B[k]);
 location.href=R+'#mmimport='+encodeURIComponent(btoa(Q))
@@ -1029,7 +1029,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='Safari取り込み v23。ランキング動画を一覧へ統合し、静止サムネだけの重複を除去します。カテゴリ事前取得で動画が0件ならJavaScript実行後の実DOMを再確認し、画像だけの誤取り込みを避けます。最大10カテゴリを事前取得し、MyMelter内で即切替できます。既存の「MyMelter取込」は最新版へ1回更新してください。';
+  $('#browserImportStatus').textContent='Safari取り込み v24。ランキング動画を一覧へ統合し、静止サムネだけの重複を除去します。カテゴリ事前取得で動画が0件ならJavaScript実行後の実DOMを再確認し、画像だけの誤取り込みを避けます。最大10カテゴリを事前取得し、MyMelter内で即切替できます。既存の「MyMelter取込」は最新版へ1回更新してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -1113,7 +1113,7 @@ function consumeBrowserImportHash(){
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); state.meta.browserImportVersion=Math.max(Number(state.meta.browserImportVersion||0),Number(payload?.v||0)); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / カテゴリ '+(channel.categoryTabs?.length||0)+'件（事前取得 '+Object.keys(channel.categorySnapshots||{}).length+'件） / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<23?'（取込コードv23へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / カテゴリ '+(channel.categoryTabs?.length||0)+'件（事前取得 '+Object.keys(channel.categorySnapshots||{}).length+'件） / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<24?'（取込コードv24へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -2605,14 +2605,14 @@ function webSimilarSearchQuery(channel){
 }
 function renderWebSimilarFallback(channel,message=''){
   const text=message||'元ページ内に十分な関連リンクがありません。Web検索から候補を探せます。';
-  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv23への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
+  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv24への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
 }
 function startWebSimilarSearch(channel){
   if(!channel)return;
   const query=webSimilarSearchQuery(channel),url='https://html.duckduckgo.com/html/?q='+encodeURIComponent(query);
   state.meta.pendingWebSimilar={channelId:channel.id,query,at:Date.now()};saveState(false);
   const v=Number(state.meta.browserImportVersion||channel.relatedSitesVersion||0);
-  toast(v<23?'検索結果でv23の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
+  toast(v<24?'検索結果でv24の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
   const win=window.open(url,'_blank','noopener');if(!win)window.location.href=url;
 }
 async function runSimilarDiscovery(channel){
