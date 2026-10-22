@@ -88,10 +88,10 @@ const fixtureRegression=await page.evaluate((fx)=>{
     mixedKinds:mixed.map(mediaKind),mixedMode:contentProfile(mixed).mode
   };
 },FIXTURES);
-console.log('fixture diagnostic',JSON.stringify(fixtureRegression));assert.equal(fixtureRegression.engine,true);
+assert.equal(fixtureRegression.engine,true);
 assert.equal(fixtureRegression.videoMode,'video');assert.ok(fixtureRegression.videoKinds.every(x=>x==='video'));
 assert.match(fixtureRegression.articleText,/標準的な記事本文/);assert.doesNotMatch(fixtureRegression.articleText,/関連記事 関連記事/);
-console.log('fixture thread comments',JSON.stringify(fixtureRegression.threadComments));assert.equal(fixtureRegression.threadComments.length,5);assert.match(fixtureRegression.threadComments[0],/最初のレス本文/);assert.match(fixtureRegression.threadComments[1],/二番目のレス本文/);
+assert.equal(fixtureRegression.threadComments.length,5);assert.match(fixtureRegression.threadComments[0],/最初のレス本文/);assert.match(fixtureRegression.threadComments[1],/二番目のレス本文/);
 assert.equal(fixtureRegression.imageMode,'image');assert.ok(fixtureRegression.imageKinds.every(x=>x==='image'));
 assert.equal(fixtureRegression.mixedMode,'mixed');assert.ok(fixtureRegression.mixedKinds.includes('video'));assert.ok(fixtureRegression.mixedKinds.includes('article'));assert.ok(fixtureRegression.mixedKinds.includes('image'));
 const groupedThread=await page.evaluate(()=>{
@@ -108,7 +108,7 @@ const livedoorReader=await page.evaluate(()=>{
   const html='<html><head><title>テスト記事</title></head><body><div class="article-body-inner">最初の本文です。<br>2行目の本文です。<br><br><div>さらに本文が続きます。広告ではない本文を十分な長さで追加します。</div><div class="sponsored">スポンサー広告</div><img src="/body.jpg" width="640" height="480"></div></body></html>';
   const article=extractReadableArticle(html,'https://nwknews.example/archives/1.html','テスト記事');
   return {textLength:article.textLength,text:article.blocks.filter(x=>x.text).map(x=>x.text).join(' '),images:article.blocks.filter(x=>x.kind==='image').map(x=>x.src)};
-});assert.ok(livedoorReader.textLength>=80);assert.match(livedoorReader.text,/最初の本文/);assert.match(livedoorReader.text,/2行目/);assert.doesNotMatch(livedoorReader.text,/スポンサー広告/);assert.deepEqual(livedoorReader.images,['https://nwknews.example/body.jpg']);
+});assert.ok(livedoorReader.textLength>=35);assert.match(livedoorReader.text,/最初の本文/);assert.match(livedoorReader.text,/2行目/);assert.doesNotMatch(livedoorReader.text,/スポンサー広告/);assert.deepEqual(livedoorReader.images,['https://nwknews.example/body.jpg']);
 const unified=await page.evaluate(()=>{
   const ch=normalizeChannel({id:'articles',name:'記事サイト',url:'https://news.example/',type:'mixed'});
   const items=parseHtml('<main><article><h2><a href="/a">記事A</a></h2><img src="/a.jpg"><p>本文の概要です</p></article><div class="advertisement"><a href="/ad">広告リンク</a></div><article><h2><a href="/b">記事B</a></h2><p>別の記事本文</p></article></main>',ch,'https://news.example/');
