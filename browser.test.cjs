@@ -268,7 +268,7 @@ const articlePages=await page.evaluate(async()=>{
   const old=fetchText;fetchText=async u=>docs[u]||'';const out=await loadReadableArticlePages({title:'記事',url:'https://article-pages.example/a',type:'article'},5);fetchText=old;
   return {pages:out.pages,text:out.blocks.filter(x=>x.text).map(x=>x.text).join(' '),next:articleContinuationUrl(docs['https://article-pages.example/a'],'https://article-pages.example/a')};
 });assert.equal(articlePages.pages,3);assert.match(articlePages.text,/1ページ目/);assert.match(articlePages.text,/2ページ目/);assert.match(articlePages.text,/3ページ目/);assert.equal(articlePages.next,'https://article-pages.example/a?page=2');
-assert.equal(await page.evaluate(()=>APP_VERSION),'1.7.8');
+assert.equal(await page.evaluate(()=>APP_VERSION),'1.7.9');
 const genericDirectRegression=await page.evaluate(()=>{
   const ch=normalizeChannel({id:'general',name:'General Site',url:'https://sample.example/',type:'mixed'});
   const clips='<html><body><main>'+
@@ -442,5 +442,5 @@ await page.route('https://fixture.example/**',route=>route.fulfill({status:200,c
 await page.evaluate(()=>{fetchText=async()=> '#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:3,\npart.ts\n#EXT-X-ENDLIST';return openQualityPicker({title:'fixture',videoUrl:'https://fixture.example/video.m3u8'},null,true);});
 const downloadEvent=page.waitForEvent('download');await page.locator('[data-quality-start]').click();const download=await downloadEvent;assert.equal(download.suggestedFilename(),'fixture.zip');const zip=fs.readFileSync(await download.path());assert.equal(zip.readUInt32LE(0),0x04034b50);assert.ok(zip.includes(Buffer.from('playlist.m3u8')));assert.ok(zip.includes(Buffer.from('media-00000.ts')));assert.ok(zip.includes(Buffer.from([0x47,0x01,0x02])));
 await page.evaluate(()=>{navigate('channels');state.ui.channelGenre='all';renderChannelManager();});await page.screenshot({path:__dirname+'/../channels-mobile.png',fullPage:true});
-assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.8 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v25 legacy plus v26 fast import, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
+assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.9 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v25 legacy plus v26 fast import, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
