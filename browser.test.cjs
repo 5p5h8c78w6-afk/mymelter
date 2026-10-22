@@ -24,7 +24,7 @@ await page.locator('#channelGenre').selectOption('ゲーム');await page.evaluat
 const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('mymelter-state-v2')));assert.equal(stored.channels[0].genre,'ゲーム');assert.equal(stored.channels[0].custom,'keep');assert.equal(stored.channels[0].createdAt,123);assert.equal(stored.saved.length,1);assert.equal(stored.settings.proxyKey,'keep-key');
 const candidates=await page.evaluate(()=>externalSiteCandidates(new DOMParser().parseFromString('<div>関連サイト<a href="https://another.example/"><img src="/thumb.jpg">ゲーム動画</a><a href="https://another.example/x">ゲーム</a><a href="https://ads.example/">【PR】おすすめ広告</a><a href="javascript:alert(1)">ゲーム</a><a href="https://video.example/">動画</a><a href="https://x.example/">ログイン</a></div>','text/html'),'https://video.example/',state.channels[0]));assert.equal(candidates.length,1);assert.equal(candidates[0].url,'https://another.example/');assert.equal(candidates[0].image,'https://video.example/thumb.jpg');
 const twidlBookmarklet=await page.evaluate(()=>{
-  const code=buildBrowserImportBookmarklet();
+  const code=buildBrowserImportBookmarkletAdvanced();
   return {parser:code.includes('parseTwiDl'),path:code.includes('v\\\\.php'),detail:code.includes('hydrateTwiDl'),source:code.includes('video\\\\.twimg\\\\.com'),valid:!!new Function(code.slice('javascript:'.length))};
 });assert.equal(twidlBookmarklet.parser,true);assert.equal(twidlBookmarklet.detail,true);assert.equal(twidlBookmarklet.valid,true);
 const twidlLinkOnly=await page.evaluate(()=>{
@@ -37,6 +37,41 @@ const twidlLinkOnly=await page.evaluate(()=>{
   sourceButton.click();window.open=original;
   return {card:!!card,sourceButton:!!sourceButton,opened,html:root.textContent};
 });assert.equal(twidlLinkOnly.card,true);assert.equal(twidlLinkOnly.sourceButton,true);assert.equal(twidlLinkOnly.opened,'https://www.twi-dl.net/v.php?video=123456789012345');assert.match(twidlLinkOnly.html,/元ページ/);
+const quickImportV26=await page.evaluate(async()=>{
+ const code=buildBrowserImportBookmarklet();
+ const run=async (html,url)=>{
+  const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL(url);
+  let alerted='';
+  const evalFn=new Function('document','location','alert','return '+code.slice('javascript:'.length));
+  evalFn(doc,loc,x=>alerted=String(x));
+  const early=!!doc.querySelector('#mymelter-import-status');
+  await new Promise(resolve=>setTimeout(resolve,260));
+  const hash=loc.hash||'',encoded=hash.startsWith('#mmimport=')?hash.slice('#mmimport='.length):'';
+  const payload=encoded?JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(encoded)),c=>c.charCodeAt(0)))):null;
+  return {alerted,early,status:doc.querySelector('#mymelter-import-status')?.textContent||'',payload};
+ };
+ const success=await run('<html><head><title>Twitter動画保管庫</title></head><body><main>'+
+  '<div class="tile"><a href="/v.php?video=111111111111111"><img data-src="/poster1.jpg" alt="動画1"></a></div>'+
+  '<div class="tile"><a href="/watch/second"><img src="/poster2.jpg" alt="動画2"></a></div>'+
+  '<div class="advertisement"><a href="/watch/ad"><img src="/advert.jpg" alt="広告"></a></div>'+
+  '</main></body></html>','https://www.twi-dl.net/hozon.php');
+ const none=await run('<html><body><main><h1>リンクなし</h1></main></body></html>','https://empty.example/');
+ return {size:code.length,success,none};
+});
+assert.ok(quickImportV26.size<6500);
+assert.equal(quickImportV26.success.early,true);
+assert.match(quickImportV26.success.status,/MyMelter/);
+assert.equal(quickImportV26.success.alerted,'');
+assert.equal(quickImportV26.success.payload.v,26);
+assert.equal(quickImportV26.success.payload.i.length,2);
+assert.deepEqual(quickImportV26.success.payload.i.map(x=>x.u),[
+ 'https://www.twi-dl.net/v.php?video=111111111111111',
+ 'https://www.twi-dl.net/watch/second'
+]);
+assert.ok(quickImportV26.success.payload.i.every(x=>x.y==='video'&&!x.m));
+assert.equal(quickImportV26.none.early,true);
+assert.match(quickImportV26.none.alerted,/起動しました/);
+
 const twidlSynthetic=await page.evaluate(async()=>{
   const html='<html><head><title>Twitter動画保管庫</title></head><body><div class="listing">'+
     '<div class="tile"><a href="/v.php?video=1234567890123456789"><img data-src="/a.jpg" alt="動画A"></a></div>'+
@@ -44,7 +79,7 @@ const twidlSynthetic=await page.evaluate(async()=>{
     '<a href="https://ads.example/pr"><img src="/advert.jpg" alt="広告"></a>'+
     '</div></body></html>';
   const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL('https://www.twi-dl.net/hozon.php');
-  const script=buildBrowserImportBookmarklet().slice('javascript:'.length);
+  const script=buildBrowserImportBookmarkletAdvanced().slice('javascript:'.length);
   const run=new Function('document','location','alert','fetch','return '+script);
   let error='';
   await run(doc,loc,t=>{error=String(t)},async u=>({ok:true,text:async()=>String(u).includes('1234567890123456789')?'<video><source src="https://video.twimg.com/demo/a.mp4"></video>':'<div>元データなし</div>'}));
@@ -71,7 +106,7 @@ const twidlVariant=await page.evaluate(async()=>{
   '<div class="advertisement"><a href="/watch/promoted"><img src="/ad.jpg" alt="広告"></a></div>'+
   '<a href="/?p=1">次のページへ</a></main></body></html>';
  const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL('https://www.twi-dl.net/hozon.php');
- const runner=new Function('document','location','alert','fetch','return '+buildBrowserImportBookmarklet().slice('javascript:'.length));
+ const runner=new Function('document','location','alert','fetch','return '+buildBrowserImportBookmarkletAdvanced().slice('javascript:'.length));
  let error='';
  await runner(doc,loc,msg=>error=String(msg),async u=>({ok:true,text:async()=>String(u).includes('clip-alpha')?
   '<html><head><meta property="og:video:url" content="https://cdn.example/clip-alpha.mp4"></head></html>':
@@ -107,7 +142,7 @@ assert.equal(detailResolution.opened,1);
 const generalImport=await page.evaluate(async()=>{
   const run=async(html,url)=>{
     const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL(url);
-    const script=buildBrowserImportBookmarklet().slice('javascript:'.length);
+    const script=buildBrowserImportBookmarkletAdvanced().slice('javascript:'.length);
     const execute=new Function('document','location','alert','fetch','return '+script);
     let error='';await execute(doc,loc,m=>error=String(m),async()=>({ok:false}));
     if(!loc.hash.startsWith('#mmimport='))return {error,items:[]};
@@ -134,7 +169,7 @@ assert.equal(generalImport.htmlVideo.items[0].type,'video');
 assert.equal(generalImport.jsonLd.items[0].video,'https://cdn.example/structured.mp4');
 assert.deepEqual(generalImport.article.items.map(x=>x.type),['article']);
 
-const bookmarklet=await page.evaluate(()=>buildBrowserImportBookmarklet());assert.match(bookmarklet,/v:25/);assert.ok(bookmarklet.includes("if(!u||!String(u).trim())return''"));assert.match(bookmarklet,/iframeDoc\(cat\.u,850\)/);assert.match(bookmarklet,/liveVideos>videoCount/);assert.match(bookmarklet,/collectCategories/);assert.match(bookmarklet,/c:C\.slice\(0,16\)/);assert.match(bookmarklet,/g:GS/);assert.match(bookmarklet,/snapshotDocItems/);assert.match(bookmarklet,/compactItems/);assert.match(bookmarklet,/discoverNextPage/);assert.match(bookmarklet,/autoPages<5/);assert.match(bookmarklet,/m:'web-search'/);assert.match(bookmarklet,/collectSearchResults/);assert.match(bookmarklet,/parseArticles\(doc,base\);\s*parseImages\(doc,base\);/);assert.match(bookmarklet,/twidouga\\\.net/);assert.match(bookmarklet,/parseTw\(doc,base\)/);assert.doesNotMatch(bookmarklet,/if\(I\.length===before\)parseArticles/);assert.match(bookmarklet,/e:E\.slice\(0,30\)/);assert.match(bookmarklet,/sc:score/);assert.match(bookmarklet,/i:im/);assert.doesNotThrow(()=>new Function(bookmarklet.slice('javascript:'.length)));
+const bookmarklet=await page.evaluate(()=>buildBrowserImportBookmarkletAdvanced());assert.match(bookmarklet,/v:25/);assert.ok(bookmarklet.includes("if(!u||!String(u).trim())return''"));assert.match(bookmarklet,/iframeDoc\(cat\.u,850\)/);assert.match(bookmarklet,/liveVideos>videoCount/);assert.match(bookmarklet,/collectCategories/);assert.match(bookmarklet,/c:C\.slice\(0,16\)/);assert.match(bookmarklet,/g:GS/);assert.match(bookmarklet,/snapshotDocItems/);assert.match(bookmarklet,/compactItems/);assert.match(bookmarklet,/discoverNextPage/);assert.match(bookmarklet,/autoPages<5/);assert.match(bookmarklet,/m:'web-search'/);assert.match(bookmarklet,/collectSearchResults/);assert.match(bookmarklet,/parseArticles\(doc,base\);\s*parseImages\(doc,base\);/);assert.match(bookmarklet,/twidouga\\\.net/);assert.match(bookmarklet,/parseTw\(doc,base\)/);assert.doesNotMatch(bookmarklet,/if\(I\.length===before\)parseArticles/);assert.match(bookmarklet,/e:E\.slice\(0,30\)/);assert.match(bookmarklet,/sc:score/);assert.match(bookmarklet,/i:im/);assert.doesNotThrow(()=>new Function(bookmarklet.slice('javascript:'.length)));
 const safariSimilar=await page.evaluate(async()=>{let calls=0;const old=fetchText;fetchText=async()=>{calls++;throw Error('browser similar must not fetch');};const ch=normalizeChannel({id:'safari-fixture',name:'Safari',url:'https://blocked.example/',type:'video',source:'browser',browserSourceUrl:'https://blocked.example/',relatedSitesVersion:14,relatedSites:[{name:'関連動画',url:'https://related.example/',image:'https://blocked.example/related.jpg',similarityScore:5,type:'video',genre:'動画'},{name:'【PR】広告',url:'https://ads.example/',similarityScore:9,type:'mixed'}]});state.channels.push(ch);await runSimilarDiscovery(ch);const out={calls,status:document.querySelector('#discoverStatus').textContent,items:state.candidates.map(x=>({url:x.url,image:x.image}))};state.channels=state.channels.filter(x=>x.id!==ch.id);fetchText=old;if(document.querySelector('#discoverDialog').open)document.querySelector('#discoverDialog').close();return out;});assert.equal(safariSimilar.calls,0);assert.deepEqual(safariSimilar.items,[{url:'https://related.example/',image:'https://blocked.example/related.jpg'}]);assert.match(safariSimilar.status,/広告・PR/);
 const safariLegacy=await page.evaluate(async()=>{let calls=0;const old=fetchText;fetchText=async()=>{calls++;throw Error('legacy browser similar must not fetch');};const ch=normalizeChannel({id:'safari-old',name:'Safari旧版',url:'https://blocked-old.example/',source:'browser',browserSourceUrl:'https://blocked-old.example/',relatedSitesVersion:13,relatedSites:[]});state.channels.push(ch);await runSimilarDiscovery(ch);const out={calls,reimport:!!document.querySelector('[data-browser-import-target="https://blocked-old.example/"]'),status:document.querySelector('#discoverStatus').textContent};state.channels=state.channels.filter(x=>x.id!==ch.id);fetchText=old;if(document.querySelector('#discoverDialog').open)document.querySelector('#discoverDialog').close();return out;});assert.equal(safariLegacy.calls,0);assert.equal(safariLegacy.reimport,true);assert.match(safariLegacy.status,/最新版/);
 const webFallback=await page.evaluate(async()=>{const ch=normalizeChannel({id:'web-fallback',name:'動画サイト',url:'https://fallback.example/',type:'video',source:'browser',browserSourceUrl:'https://fallback.example/',relatedSitesVersion:14,relatedSites:[]});state.channels.push(ch);await runSimilarDiscovery(ch);const button=!!document.querySelector('[data-web-similar-channel="web-fallback"]');const out={button,status:document.querySelector('#discoverStatus').textContent};state.channels=state.channels.filter(x=>x.id!==ch.id);if(document.querySelector('#discoverDialog').open)document.querySelector('#discoverDialog').close();return out;});assert.equal(webFallback.button,true);assert.match(webFallback.status,/ページ内/);
@@ -183,7 +218,7 @@ const articlePages=await page.evaluate(async()=>{
   const old=fetchText;fetchText=async u=>docs[u]||'';const out=await loadReadableArticlePages({title:'記事',url:'https://article-pages.example/a',type:'article'},5);fetchText=old;
   return {pages:out.pages,text:out.blocks.filter(x=>x.text).map(x=>x.text).join(' '),next:articleContinuationUrl(docs['https://article-pages.example/a'],'https://article-pages.example/a')};
 });assert.equal(articlePages.pages,3);assert.match(articlePages.text,/1ページ目/);assert.match(articlePages.text,/2ページ目/);assert.match(articlePages.text,/3ページ目/);assert.equal(articlePages.next,'https://article-pages.example/a?page=2');
-assert.equal(await page.evaluate(()=>APP_VERSION),'1.7.6');
+assert.equal(await page.evaluate(()=>APP_VERSION),'1.7.7');
 const genericDirectRegression=await page.evaluate(()=>{
   const ch=normalizeChannel({id:'general',name:'General Site',url:'https://sample.example/',type:'mixed'});
   const clips='<html><body><main>'+
@@ -357,5 +392,5 @@ await page.route('https://fixture.example/**',route=>route.fulfill({status:200,c
 await page.evaluate(()=>{fetchText=async()=> '#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:3,\npart.ts\n#EXT-X-ENDLIST';return openQualityPicker({title:'fixture',videoUrl:'https://fixture.example/video.m3u8'},null,true);});
 const downloadEvent=page.waitForEvent('download');await page.locator('[data-quality-start]').click();const download=await downloadEvent;assert.equal(download.suggestedFilename(),'fixture.zip');const zip=fs.readFileSync(await download.path());assert.equal(zip.readUInt32LE(0),0x04034b50);assert.ok(zip.includes(Buffer.from('playlist.m3u8')));assert.ok(zip.includes(Buffer.from('media-00000.ts')));assert.ok(zip.includes(Buffer.from([0x47,0x01,0x02])));
 await page.evaluate(()=>{navigate('channels');state.ui.channelGenre='all';renderChannelManager();});await page.screenshot({path:__dirname+'/../channels-mobile.png',fullPage:true});
-assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.3 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v25 fallback, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
+assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.7 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v25 legacy plus v26 fast import, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
