@@ -75,7 +75,7 @@ const twidlVariant=await page.evaluate(async()=>{
  let error='';
  await runner(doc,loc,msg=>error=String(msg),async u=>({ok:true,text:async()=>String(u).includes('clip-alpha')?
   '<html><head><meta property="og:video:url" content="https://cdn.example/clip-alpha.mp4"></head></html>':
-  '<html><body><video poster="/beta-poster.jpg"><source src="https://video.twimg.com/video/beta.mp4"></video></body></html>'}));
+  String(u).includes('77777777777777')?'<html><body><video poster="/beta-poster.jpg"><source src="https://video.twimg.com/video/beta.mp4"></video></body></html>':'<html><body></body></html>'}));
  const packed=loc.hash.startsWith('#mmimport=')?loc.hash.slice('#mmimport='.length):'';
  if(!packed)return {error,items:[]};
  const data=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(packed)),c=>c.charCodeAt(0))));
