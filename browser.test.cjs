@@ -49,16 +49,17 @@ const directGalleryRegression=await page.evaluate(async()=>{
 });
 assert.deepEqual(directGalleryRegression,{openCount:2,lastIndex:1,length:2,hasReviewControl:false,dialogOpen:false,alt:true,fallback:true,noMediaThumb:true});
 
-const twidlLinkOnly=await page.evaluate(()=>{
+const twidlLinkOnly=await page.evaluate(async()=>{
   const item={id:'twi-link',title:'Twitter動画',url:'https://www.twi-dl.net/v.php?video=123456789012345',videoUrl:'',type:'video',image:'https://pbs.twimg.com/example.jpg'};
   activeItems=[item];activeChannel={name:'Twitter動画保管庫',deepDiveItems:[]};
   const root=document.getElementById('readerContent');activeReaderMode='video';renderReader();
   const card=root.querySelector('[data-video-gallery-open]');
-  let opened='';const original=window.open;window.open=u=>{opened=u;return {};};
-  const sourceButton=root.querySelector('[data-open-url]');
-  sourceButton.click();window.open=original;
-  return {card:!!card,sourceButton:!!sourceButton,opened,html:root.textContent};
-});assert.equal(twidlLinkOnly.card,true);assert.equal(twidlLinkOnly.sourceButton,true);assert.equal(twidlLinkOnly.opened,'https://www.twi-dl.net/v.php?video=123456789012345');assert.match(twidlLinkOnly.html,/元ページ/);
+  const original=openVideoFeedItems;let launched=false,chosen=[];
+  openVideoFeedItems=(items)=>{launched=true;chosen=items};
+  card.click();await new Promise(r=>setTimeout(r,5));openVideoFeedItems=original;
+  const fallback=videoSlideHTML(item,0);
+  return {card:!!card,launched,count:chosen.length,thumb:!!card.querySelector('img'),hasExtraDialog:!!root.querySelector('[data-video-detail]'),fallback: fallback.includes('元ページで再生する')&&fallback.includes('直接再生URLは未取得')};
+});assert.deepEqual(twidlLinkOnly,{card:true,launched:true,count:1,thumb:true,hasExtraDialog:false,fallback:true});
 const quickImportV28=await page.evaluate(async()=>{
  const code=buildBrowserImportBookmarklet();
  const run=async(html,url,mode='success')=>{
