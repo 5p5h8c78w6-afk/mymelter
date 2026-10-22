@@ -852,11 +852,15 @@ var parseRaw=function(doc,base){
 };
 var adBox=function(el){
   if(!el)return false;
-  var meta=((el.id||'')+' '+(typeof el.className==='string'?el.className:'')+' '+(el.getAttribute&&el.getAttribute('aria-label')||'')).toLowerCase();
+  var tag=el,levels=0;
+  while(tag&&levels++<4){
+    var meta=((tag.id||'')+' '+(typeof tag.className==='string'?tag.className:'')+' '+(tag.getAttribute&&tag.getAttribute('aria-label')||'')).toLowerCase();
+    if(/(^|[\\s_-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([\\s_-]|$)/i.test(meta))return true;
+    if(/^(BODY|HTML|MAIN|ARTICLE)$/i.test(tag.tagName||''))break;
+    tag=tag.parentElement
+  }
   var tx=X(el).slice(0,180);
-  var structural=/(^|[\\s_-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([\\s_-]|$)/i.test(meta);
-  var disclosure=/^\\s*(?:【PR】|\\[PR\\]|PR[:：\\s]|広告[:：\\s]|スポンサー[:：\\s]|sponsored\\b|affiliate\\b|アフィリエイト[:：\\s])/i.test(tx);
-  return structural||disclosure
+  return /^\\s*(?:【PR】|\\[PR\\]|PR[:：\\s]|広告[:：\\s]|スポンサー[:：\\s]|sponsored\\b|affiliate\\b|アフィリエイト[:：\\s])/i.test(tx)
 };
 var sourceUrl=function(el,base){
   if(!el)return'';
