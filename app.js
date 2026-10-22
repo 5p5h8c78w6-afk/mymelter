@@ -80,10 +80,13 @@ function mediaKind(item){ return MyMelterContentEngine.kind(item||{}); }
 function adLikeText(text=''){return /(?:【PR】|\[PR\]|(^|\s)PR(?:\s|$)|広告|スポンサー|sponsored|advertisement|affiliate|アフィリエイト|promoted|promotion|amazonで|楽天で|詳しくはこちら)/i.test(String(text||''));}
 function adLikeElement(el){
   if(!el)return false;
-  const meta=((el.id||'')+' '+(el.className||'')+' '+(el.getAttribute?.('role')||'')+' '+(el.getAttribute?.('aria-label')||'')).toLowerCase();
+  const meta=((el.id||'')+' '+(typeof el.className==='string'?el.className:'')+' '+(el.getAttribute?.('role')||'')+' '+(el.getAttribute?.('aria-label')||'')).toLowerCase();
   if(/(^|[\s_-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([\s_-]|$)/i.test(meta))return true;
+  const tag=String(el.tagName||'').toUpperCase();
+  if(['HTML','BODY','MAIN','ARTICLE','SECTION'].includes(tag))return false;
+  if(el.querySelector?.('article,main,section,p,h1,h2,h3'))return false;
   const text=(el.textContent||'').replace(/\s+/g,' ').trim();
-  return text.length>0&&text.length<=180&&adLikeText(text);
+  return text.length>0&&text.length<=120&&/^(?:【PR】|\[PR\]|PR[:：\s]|広告[:：\s]|スポンサー[:：\s]|sponsored\b|advertisement\b|affiliate\b)/i.test(text);
 }
 function contentProfile(items=[]){ return MyMelterContentEngine.profile(items||[]); }
 function preferredReaderMode(items=[]){const p=contentProfile(items);return p.mode==='video'?'video':p.mode==='image'?'media':'list';}
