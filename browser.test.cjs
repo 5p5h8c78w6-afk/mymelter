@@ -37,40 +37,57 @@ const twidlLinkOnly=await page.evaluate(()=>{
   sourceButton.click();window.open=original;
   return {card:!!card,sourceButton:!!sourceButton,opened,html:root.textContent};
 });assert.equal(twidlLinkOnly.card,true);assert.equal(twidlLinkOnly.sourceButton,true);assert.equal(twidlLinkOnly.opened,'https://www.twi-dl.net/v.php?video=123456789012345');assert.match(twidlLinkOnly.html,/元ページ/);
-const quickImportV26=await page.evaluate(async()=>{
+const quickImportV27=await page.evaluate(async()=>{
  const code=buildBrowserImportBookmarklet();
- const run=async (html,url)=>{
+ const run=async(html,url,mode='success')=>{
   const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL(url);
-  let alerted='';
-  const evalFn=new Function('document','location','alert','return '+code.slice('javascript:'.length));
-  evalFn(doc,loc,x=>alerted=String(x));
+  let alerted='',count=0;
+  const fakeFetch=async u=>{
+    count++;
+    if(mode==='blocked')throw Error('HTTP 403');
+    const body=String(u).includes('111111111111111')
+      ?'<html><body><video><source src="https://video.twimg.com/fixture/a.mp4"></video></body></html>'
+      :'<html><head><meta property="og:video:url" content="https://cdn.example/test/b.m3u8"></head></html>';
+    return {ok:true,headers:{get:()=>''},text:async()=>body};
+  };
+  const evalFn=new Function('document','location','alert','fetch','return '+code.slice('javascript:'.length));
+  evalFn(doc,loc,x=>alerted=String(x),fakeFetch);
   const early=!!doc.querySelector('#mymelter-import-status');
-  await new Promise(resolve=>setTimeout(resolve,260));
+  await new Promise(resolve=>setTimeout(resolve,500));
   const hash=loc.hash||'',encoded=hash.startsWith('#mmimport=')?hash.slice('#mmimport='.length):'';
   const payload=encoded?JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(encoded)),c=>c.charCodeAt(0)))):null;
-  return {alerted,early,status:doc.querySelector('#mymelter-import-status')?.textContent||'',payload};
+  return {alerted,early,status:doc.querySelector('#mymelter-import-status')?.textContent||'',payload,count};
  };
- const success=await run('<html><head><title>Twitter動画保管庫</title></head><body><main>'+
+ const fixture='<html><head><title>Twitter動画保管庫</title></head><body><main>'+
   '<div class="tile"><a href="/v.php?video=111111111111111"><img data-src="/poster1.jpg" alt="動画1"></a></div>'+
   '<div class="tile"><a href="/watch/second"><img src="/poster2.jpg" alt="動画2"></a></div>'+
   '<div class="advertisement"><a href="/watch/ad"><img src="/advert.jpg" alt="広告"></a></div>'+
-  '</main></body></html>','https://www.twi-dl.net/hozon.php');
+  '</main></body></html>';
+ const success=await run(fixture,'https://www.twi-dl.net/hozon.php');
+ const blocked=await run(fixture,'https://www.twi-dl.net/hozon.php','blocked');
  const none=await run('<html><body><main><h1>リンクなし</h1></main></body></html>','https://empty.example/');
- return {size:code.length,success,none};
+ return {size:code.length,success,blocked,none};
 });
-assert.ok(quickImportV26.size<6500);
-assert.equal(quickImportV26.success.early,true);
-assert.match(quickImportV26.success.status,/MyMelter/);
-assert.equal(quickImportV26.success.alerted,'');
-assert.equal(quickImportV26.success.payload.v,26);
-assert.equal(quickImportV26.success.payload.i.length,2);
-assert.deepEqual(quickImportV26.success.payload.i.map(x=>x.u),[
+assert.ok(quickImportV27.size<10000);
+assert.equal(quickImportV27.success.early,true);
+assert.equal(quickImportV27.success.alerted,'');
+assert.equal(quickImportV27.success.payload.v,27);
+assert.equal(quickImportV27.success.payload.i.length,2);
+assert.deepEqual(quickImportV27.success.payload.i.map(x=>x.u),[
  'https://www.twi-dl.net/v.php?video=111111111111111',
  'https://www.twi-dl.net/watch/second'
 ]);
-assert.ok(quickImportV26.success.payload.i.every(x=>x.y==='video'&&!x.m));
-assert.equal(quickImportV26.none.early,true);
-assert.match(quickImportV26.none.alerted,/起動しました/);
+assert.deepEqual(quickImportV27.success.payload.i.map(x=>x.m),[
+ 'https://video.twimg.com/fixture/a.mp4','https://cdn.example/test/b.m3u8'
+]);
+assert.deepEqual(quickImportV27.success.payload.h,{total:2,ok:2,failed:0});
+assert.equal(quickImportV27.success.count,2);
+assert.equal(quickImportV27.blocked.payload.h.ok,0);
+assert.equal(quickImportV27.blocked.payload.h.failed,2);
+assert.equal(quickImportV27.blocked.payload.i.length,2);
+assert.ok(quickImportV27.blocked.payload.i.every(x=>x.y==='video'&&!x.m));
+assert.equal(quickImportV27.none.early,true);
+assert.match(quickImportV27.none.alerted,/起動しました/);
 
 const twidlSynthetic=await page.evaluate(async()=>{
   const html='<html><head><title>Twitter動画保管庫</title></head><body><div class="listing">'+
@@ -251,7 +268,7 @@ const articlePages=await page.evaluate(async()=>{
   const old=fetchText;fetchText=async u=>docs[u]||'';const out=await loadReadableArticlePages({title:'記事',url:'https://article-pages.example/a',type:'article'},5);fetchText=old;
   return {pages:out.pages,text:out.blocks.filter(x=>x.text).map(x=>x.text).join(' '),next:articleContinuationUrl(docs['https://article-pages.example/a'],'https://article-pages.example/a')};
 });assert.equal(articlePages.pages,3);assert.match(articlePages.text,/1ページ目/);assert.match(articlePages.text,/2ページ目/);assert.match(articlePages.text,/3ページ目/);assert.equal(articlePages.next,'https://article-pages.example/a?page=2');
-assert.equal(await page.evaluate(()=>APP_VERSION),'1.7.8');
+assert.equal(await page.evaluate(()=>APP_VERSION),'1.7.9');
 const genericDirectRegression=await page.evaluate(()=>{
   const ch=normalizeChannel({id:'general',name:'General Site',url:'https://sample.example/',type:'mixed'});
   const clips='<html><body><main>'+
@@ -425,5 +442,5 @@ await page.route('https://fixture.example/**',route=>route.fulfill({status:200,c
 await page.evaluate(()=>{fetchText=async()=> '#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:3,\npart.ts\n#EXT-X-ENDLIST';return openQualityPicker({title:'fixture',videoUrl:'https://fixture.example/video.m3u8'},null,true);});
 const downloadEvent=page.waitForEvent('download');await page.locator('[data-quality-start]').click();const download=await downloadEvent;assert.equal(download.suggestedFilename(),'fixture.zip');const zip=fs.readFileSync(await download.path());assert.equal(zip.readUInt32LE(0),0x04034b50);assert.ok(zip.includes(Buffer.from('playlist.m3u8')));assert.ok(zip.includes(Buffer.from('media-00000.ts')));assert.ok(zip.includes(Buffer.from([0x47,0x01,0x02])));
 await page.evaluate(()=>{navigate('channels');state.ui.channelGenre='all';renderChannelManager();});await page.screenshot({path:__dirname+'/../channels-mobile.png',fullPage:true});
-assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.8 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v25 legacy plus v26 fast import, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
+assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.7.9 unified content engine + cross-site fixtures, ranked videos, grouped forum posts, Safari v25 legacy plus v26 fast import, video missing-source UI, article/image/video/mixed profiles, HLS/Worker safety; no page errors');
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
