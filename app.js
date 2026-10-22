@@ -1338,9 +1338,13 @@ function groupThreadCommentLines(lines=[]){
   flush();
   const seen=new Set();return groups.filter(g=>{const k=g.text.replace(/\s+/g,' ');if(seen.has(k))return false;seen.add(k);return true;});
 }
+function isAdDisclosureText(text=''){
+  const s=String(text||'').replace(/\s+/g,' ').trim();
+  return s.length>0&&s.length<=120&&/^(?:【PR】|\[PR\]|PR[:：\s]|広告[:：\s]|スポンサー[:：\s]|sponsored\b|advertisement\b|affiliate\b)/i.test(s);
+}
 function extractCommentBlocks(doc,root,seenText=new Set()){
   const blocks=[],seen=new Set(seenText);
-  const skip=s=>!s||s.length<2||s.length>3000||seen.has(s)||adLikeText(s)||/^(コメントする|コメントを書く|コメントを投稿|名前|メール|URL|送信|返信|キャンセル)$/i.test(s);
+  const skip=s=>!s||s.length<2||s.length>3000||seen.has(s)||isAdDisclosureText(s)||/^(コメントする|コメントを書く|コメントを投稿|名前|メール|URL|送信|返信|キャンセル)$/i.test(s);
   const add=(text,force=false)=>{
     const s=String(text||'').replace(/\s+/g,' ').trim();
     if(skip(s)||(!force&&!isCommentLikeText(s)))return;
@@ -1404,7 +1408,7 @@ function extractReadableArticle(text,url,hintTitle=''){
       const w=Number(el.getAttribute('width')||0),h=Number(el.getAttribute('height')||0);if((w&&w<120)||(h&&h<80))continue;
       blocks.push({kind:'image',src,alt:String(el.getAttribute('alt')||'').slice(0,180)});if(blocks.length>=220)break;continue;
     }
-    const value=(el.textContent||'').replace(/\s+/g,' ').trim();if(value.length<2||adLikeText(value)||seenText.has(value))continue;
+    const value=(el.textContent||'').replace(/\s+/g,' ').trim();if(value.length<2||isAdDisclosureText(value)||seenText.has(value))continue;
     if(/cookie|プライバシーポリシー|利用規約|シェアする|フォローする/i.test(value)&&value.length<120)continue;
     seenText.add(value);
     const kind=isCommentLikeText(value)?'comment':/^H[1-3]$/.test(el.tagName)?'heading':el.tagName==='BLOCKQUOTE'?'quote':'text';
@@ -1421,7 +1425,7 @@ function extractReadableArticle(text,url,hintTitle=''){
     const lines=(clone.textContent||'').split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
     const clean=[],seen=new Set();
     for(const line of lines){
-      if(line.length<2||seen.has(line)||adLikeText(line))continue;
+      if(line.length<2||seen.has(line)||isAdDisclosureText(line))continue;
       if(/^(人気記事|関連記事|おすすめ記事|コメント|コメントする|カテゴリー|カテゴリ|トップへ|ホーム)$/i.test(line))continue;
       if(/cookie|プライバシーポリシー|利用規約|シェアする|フォローする/i.test(line)&&line.length<120)continue;
       seen.add(line);clean.push({kind:isCommentLikeText(line)?'comment':'text',text:line.slice(0,3000)});if(clean.length>=220)break;
