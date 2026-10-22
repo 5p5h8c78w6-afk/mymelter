@@ -63,3 +63,38 @@ test('diagnostics reports playable ranked video evidence',()=>{
   const d=E.diagnostics([{url:'https://x.com/1',videoUrl:'https://cdn.example/1.mp4',type:'video',browserRank:'1'}]);
   assert.equal(d.mode,'video');assert.equal(d.playableVideos,1);assert.equal(d.rankedVideos,1);
 });
+
+
+test('two ranked posts sharing one media URL remain two ordered playable entries',()=>{
+  const shared='https://cdn.example/shared.mp4';
+  const out=E.mergeItems([
+    {id:'rank2',url:'https://posts.example/2',videoUrl:shared,image:'https://cdn.example/poster.jpg',type:'video',browserRank:'2'},
+    {id:'rank1',url:'https://posts.example/1',videoUrl:shared,image:'https://cdn.example/poster.jpg',type:'video',browserRank:'1'},
+    {id:'rank1-dupe',url:'https://posts.example/1',videoUrl:shared,type:'video',browserRank:'1'}
+  ]);
+  assert.equal(out.length,2);
+  assert.deepEqual(out.map(x=>x.browserRank),['1','2']);
+  assert.deepEqual(out.map(x=>x.url),['https://posts.example/1','https://posts.example/2']);
+  assert.equal(E.diagnostics(out).playableVideos,2);
+});
+
+test('unranked legacy video enriches a ranked post without an extra card',()=>{
+  const shared='https://cdn.example/ranked.mp4';
+  const out=E.mergeItems(
+    [{id:'unranked',url:'https://posts.example/1',videoUrl:shared,image:'https://cdn.example/poster.jpg',type:'video'}],
+    [{id:'ranked',url:'https://posts.example/1',videoUrl:shared,type:'video',browserRank:'1'}]
+  );
+  assert.equal(out.length,1);
+  assert.equal(out[0].browserRank,'1');
+  assert.equal(out[0].image,'https://cdn.example/poster.jpg');
+});
+
+test('invalid media URLs are not kept as playable video or image evidence',()=>{
+  const out=E.mergeItems([
+    {id:'unsafe',url:'https://news.example/story',videoUrl:'javascript:alert(1)',image:'data:image/png;base64,AAAA',title:'Article'},
+    {id:'blank',url:'https://news.example/blank',videoUrl:'  ',image:'  ',title:'Plain article'}
+  ]);
+  assert.deepEqual(out.map(x=>x.type),['article','article']);
+  assert.ok(out.every(x=>x.videoUrl===''&&x.image===''));
+  assert.equal(E.hasPlayableVideo(out),false);
+});
