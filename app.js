@@ -504,9 +504,18 @@ function parseSitemap(xml,channel){
 }
 function genericNodes(doc){
   const candidates=['main > article,main > section,main > .post,main > .entry,main > .item,main > .card','article','main .post','main .item','main .card','main li','.post','.entry','.item','.card'];
-  for(const sel of candidates){let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{} nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href]')&&(n.textContent||'').trim().length>3); if(nodes.length>=2) return nodes.slice(0,160);}
-  const textLinks=[...doc.querySelectorAll('main a[href],article a[href],a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('li,article,div,section')||a)&&(a.textContent||'').trim().length>3);if(textLinks.length>=2)return textLinks.slice(0,160);
-  return [...doc.querySelectorAll('a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('figure,div,section')||a)&&a.querySelector('img')).slice(0,160);
+  let singleCard=[];
+  for(const sel of candidates){
+    let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{}
+    nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href]')&&(n.textContent||'').trim().length>3);
+    if(nodes.length>=2)return nodes.slice(0,160);
+    if(!singleCard.length&&nodes.length)singleCard=nodes;
+  }
+  const textLinks=[...doc.querySelectorAll('main a[href],article a[href],a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('li,article,div,section')||a)&&(a.textContent||'').trim().length>3);
+  if(textLinks.length>=2)return textLinks.slice(0,160);
+  if(singleCard.length)return singleCard;
+  const imageLinks=[...doc.querySelectorAll('a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('figure,div,section')||a)&&a.querySelector('img'));
+  return (imageLinks.length?imageLinks:textLinks).slice(0,160);
 }
 function parseHtml(text,channel,baseUrl){
   const doc=new DOMParser().parseFromString(text,'text/html'); let nodes=[];
