@@ -630,3 +630,11 @@ main,.view,.channel-list{max-width:100%;min-width:0}
     padding-right:78px;
   }
 }
+
+
+/* 1.7.8: keep video-source actions readable on narrow iPhone cards. */
+.video-gallery-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 5px 12px}
+.video-gallery-meta strong{flex:1 1 100%;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.video-gallery-meta .video-gallery-save{width:auto;min-width:32px;padding:5px 7px;min-height:32px;flex:0 1 auto}
+#videoEvidenceDialog .sheet{overflow-y:auto}
+#videoEvidenceDialog [data-evidence-status]{line-height:1.6;white-space:normal;overflow-wrap:anywhere}
