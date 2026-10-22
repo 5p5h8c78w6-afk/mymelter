@@ -27,6 +27,28 @@ const twidlBookmarklet=await page.evaluate(()=>{
   const code=buildBrowserImportBookmarkletAdvanced();
   return {parser:code.includes('parseTwiDl'),path:code.includes('v\\\\.php'),detail:code.includes('hydrateTwiDl'),source:code.includes('video\\\\.twimg\\\\.com'),valid:!!new Function(code.slice('javascript:'.length))};
 });assert.equal(twidlBookmarklet.parser,true);assert.equal(twidlBookmarklet.detail,true);assert.equal(twidlBookmarklet.valid,true);
+const directGalleryRegression=await page.evaluate(async()=>{
+ const ch={id:'video-direct-test',name:'Video',url:'https://www.twi-dl.net/hozon.php',type:'video',deepDiveItems:[]};
+ activeChannel=ch;
+ activeItems=[
+  {id:'a',type:'video',url:'https://www.twi-dl.net/v.php?video=111111111111111',image:'https://cdn.example/a.jpg',videoUrl:'https://cdn.example/a.mp4',alternateVideoUrl:'https://cdn.example/a.m3u8'},
+  {id:'b',type:'video',url:'https://www.twi-dl.net/v.php?video=222222222222222',image:'https://cdn.example/b.jpg',videoUrl:''}
+ ];
+ activeReaderMode='video';renderReader();
+ let openCount=0,lastIndex=-1,length=0;
+ const original=openVideoFeedItems;
+ openVideoFeedItems=(items,title,start)=>{openCount++;lastIndex=start;length=items.length};
+ const first=document.querySelector('[data-video-gallery-open="0"]'),second=document.querySelector('[data-video-gallery-open="1"]');
+ first.click();second.click();
+ await new Promise(r=>setTimeout(r,20));
+ openVideoFeedItems=original;
+ const hasReviewControl=!!document.querySelector('[data-video-detail]'),dialog=document.getElementById('videoEvidenceDialog');
+ const alt=videoSlideHTML(activeItems[0],0);
+ const missing=videoSlideHTML(activeItems[1],1);
+ return {openCount,lastIndex,length,hasReviewControl,dialogOpen:!!dialog?.open,alt:alt.includes('data-alternate-src="https://cdn.example/a.m3u8"'),fallback:missing.includes('直接再生URLは未取得'),noMediaThumb:!!second.querySelector('img')};
+});
+assert.deepEqual(directGalleryRegression,{openCount:2,lastIndex:1,length:2,hasReviewControl:false,dialogOpen:false,alt:true,fallback:true,noMediaThumb:true});
+
 const twidlLinkOnly=await page.evaluate(()=>{
   const item={id:'twi-link',title:'Twitter動画',url:'https://www.twi-dl.net/v.php?video=123456789012345',videoUrl:'',type:'video',image:'https://pbs.twimg.com/example.jpg'};
   activeItems=[item];activeChannel={name:'Twitter動画保管庫',deepDiveItems:[]};
@@ -37,7 +59,7 @@ const twidlLinkOnly=await page.evaluate(()=>{
   sourceButton.click();window.open=original;
   return {card:!!card,sourceButton:!!sourceButton,opened,html:root.textContent};
 });assert.equal(twidlLinkOnly.card,true);assert.equal(twidlLinkOnly.sourceButton,true);assert.equal(twidlLinkOnly.opened,'https://www.twi-dl.net/v.php?video=123456789012345');assert.match(twidlLinkOnly.html,/元ページ/);
-const quickImportV27=await page.evaluate(async()=>{
+const quickImportV28=await page.evaluate(async()=>{
  const code=buildBrowserImportBookmarklet();
  const run=async(html,url,mode='success')=>{
   const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL(url);
@@ -68,26 +90,61 @@ const quickImportV27=await page.evaluate(async()=>{
  const none=await run('<html><body><main><h1>リンクなし</h1></main></body></html>','https://empty.example/');
  return {size:code.length,success,blocked,none};
 });
-assert.ok(quickImportV27.size<10000);
-assert.equal(quickImportV27.success.early,true);
-assert.equal(quickImportV27.success.alerted,'');
-assert.equal(quickImportV27.success.payload.v,27);
-assert.equal(quickImportV27.success.payload.i.length,2);
-assert.deepEqual(quickImportV27.success.payload.i.map(x=>x.u),[
+assert.ok(quickImportV28.size<14000);
+assert.equal(quickImportV28.success.early,true);
+assert.equal(quickImportV28.success.alerted,'');
+assert.equal(quickImportV28.success.payload.v,28);
+assert.equal(quickImportV28.success.payload.i.length,2);
+assert.deepEqual(quickImportV28.success.payload.i.map(x=>x.u),[
  'https://www.twi-dl.net/v.php?video=111111111111111',
  'https://www.twi-dl.net/watch/second'
 ]);
-assert.deepEqual(quickImportV27.success.payload.i.map(x=>x.m),[
+assert.deepEqual(quickImportV28.success.payload.i.map(x=>x.m),[
  'https://video.twimg.com/fixture/a.mp4','https://cdn.example/test/b.m3u8'
 ]);
-assert.deepEqual(quickImportV27.success.payload.h,{total:2,ok:2,failed:0});
-assert.equal(quickImportV27.success.count,2);
-assert.equal(quickImportV27.blocked.payload.h.ok,0);
-assert.equal(quickImportV27.blocked.payload.h.failed,2);
-assert.equal(quickImportV27.blocked.payload.i.length,2);
-assert.ok(quickImportV27.blocked.payload.i.every(x=>x.y==='video'&&!x.m));
-assert.equal(quickImportV27.none.early,true);
-assert.match(quickImportV27.none.alerted,/起動しました/);
+assert.deepEqual(quickImportV28.success.payload.h,{total:2,ok:2,failed:0,pages:1,imported:2});
+assert.equal(quickImportV28.success.count,2);
+assert.equal(quickImportV28.blocked.payload.h.ok,0);
+assert.equal(quickImportV28.blocked.payload.h.failed,2);
+assert.equal(quickImportV28.blocked.payload.i.length,2);
+assert.ok(quickImportV28.blocked.payload.i.every(x=>x.y==='video'&&!x.m));
+assert.equal(quickImportV28.none.early,true);
+assert.match(quickImportV28.none.alerted,/起動しました/);
+
+const paginatedImportV28=await page.evaluate(async()=>{
+ const code=buildBrowserImportBookmarklet();
+ const cards=(from,to)=>Array.from({length:to-from},(_,i)=>{
+  const id=String(100000000000000+from+i);
+  return '<div class="video-card"><a href="/v.php?video='+id+'"><img src="/pic/'+id+'.jpg" alt="Video '+id+'"></a></div>'
+ }).join('');
+ const pageHTML=(num)=>'<html><body><main>'+cards((num-1)*30,num*30)+(num<4?'<a href="/hozon.php?p='+(num+1)+'">次のページへ</a>':'')+'</main></body></html>';
+ const loc=new URL('https://www.twi-dl.net/hozon.php'),doc=new DOMParser().parseFromString(pageHTML(1),'text/html');
+ let detailCalls=0,pageCalls=0;
+ const fetchMock=async url=>{
+  const u=new URL(url);
+  let body='';
+  if(u.pathname==='/hozon.php'){pageCalls++;body=pageHTML(Number(u.searchParams.get('p')));}
+  else{
+   detailCalls++;body='<html><body><video><source src="https://video.twimg.com/test/'+u.searchParams.get('video')+'.m3u8"></video><a href="https://video.twimg.com/test/'+u.searchParams.get('video')+'.mp4">ダウンロード</a></body></html>';
+  }
+  return {ok:true,headers:{get:()=>null},text:async()=>body};
+ };
+ const fn=new Function('document','location','alert','fetch','return '+code.slice('javascript:'.length));
+ let err='';fn(doc,loc,msg=>err=String(msg),fetchMock);
+ for(let i=0;i<35&&!loc.hash.startsWith('#mmimport=');i++)await new Promise(r=>setTimeout(r,50));
+ const hash=loc.hash||'',encoded=hash.startsWith('#mmimport=')?hash.slice('#mmimport='.length):'';
+ const p=encoded?JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(encoded)),x=>x.charCodeAt(0)))):null;
+ return {err,pageCalls,detailCalls,version:p?.v,items:p?.i?.length,stats:p?.h,first:p?.i?.[0],last:p?.i?.at(-1)};
+});
+assert.equal(paginatedImportV28.err,'');
+assert.equal(paginatedImportV28.version,28);
+assert.equal(paginatedImportV28.pageCalls,3);
+assert.equal(paginatedImportV28.detailCalls,40);
+assert.equal(paginatedImportV28.items,120);
+assert.deepEqual(paginatedImportV28.stats,{total:40,ok:40,failed:0,pages:4,imported:120});
+assert.ok(paginatedImportV28.first.m.endsWith('.mp4'));
+assert.ok(paginatedImportV28.first.m2.endsWith('.m3u8'));
+assert.ok(paginatedImportV28.last.u.includes('100000000000119'));
 
 const twidlSynthetic=await page.evaluate(async()=>{
   const html='<html><head><title>Twitter動画保管庫</title></head><body><div class="listing">'+
