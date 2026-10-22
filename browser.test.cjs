@@ -80,6 +80,7 @@ const generalImport=await page.evaluate(async()=>{
   const article=await run('<html><body><main><article class="post"><h2><a href="/story">Important story</a></h2><img src="/thumb.jpg" width="320" height="220"><p>Ordinary article content and commentary.</p></article></main></body></html>','https://news.example/');
   return {videoCard,lazyGallery,htmlVideo,jsonLd,article};
 });
+console.log('general fixture',JSON.stringify(generalImport));
 assert.equal(generalImport.videoCard.error,'');
 assert.equal(generalImport.videoCard.items.length,1);
 assert.equal(generalImport.videoCard.items[0].type,'video');
