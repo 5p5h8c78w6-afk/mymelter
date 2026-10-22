@@ -33,9 +33,10 @@ const twidlLinkOnly=await page.evaluate(()=>{
   const root=document.getElementById('readerContent');activeReaderMode='video';renderReader();
   const card=root.querySelector('[data-video-gallery-open]');
   let opened='';const original=window.open;window.open=u=>{opened=u;return {};};
-  card.click();window.open=original;
-  return {card:!!card,opened,html:root.textContent};
-});assert.equal(twidlLinkOnly.card,true);assert.equal(twidlLinkOnly.opened,'https://www.twi-dl.net/v.php?video=123456789012345');assert.match(twidlLinkOnly.html,/元ページ/);
+  const sourceButton=root.querySelector('[data-open-url]');
+  sourceButton.click();window.open=original;
+  return {card:!!card,sourceButton:!!sourceButton,opened,html:root.textContent};
+});assert.equal(twidlLinkOnly.card,true);assert.equal(twidlLinkOnly.sourceButton,true);assert.equal(twidlLinkOnly.opened,'https://www.twi-dl.net/v.php?video=123456789012345');assert.match(twidlLinkOnly.html,/元ページ/);
 const twidlSynthetic=await page.evaluate(async()=>{
   const html='<html><head><title>Twitter動画保管庫</title></head><body><div class="listing">'+
     '<div class="tile"><a href="/v.php?video=1234567890123456789"><img data-src="/a.jpg" alt="動画A"></a></div>'+
