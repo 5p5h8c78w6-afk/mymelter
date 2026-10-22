@@ -30,3 +30,34 @@ jobs:
         run: npm install --no-audit --no-fund --fetch-retries=1 --fetch-timeout=30000
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+
+  package:
+    needs: [unit, browser]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build user download ZIP and SHA256 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          TARGET="MyMelter-${VERSION}"
+          mkdir -p "dist/${TARGET}/worker"
+          cp index.html styles.css app.js features.js content-engine.js sw.js manifest.webmanifest version.json README.md "dist/${TARGET}/"
+          cp -R icons vendor "dist/${TARGET}/"
+          cp worker/worker.js "dist/${TARGET}/worker/"
+          printf '%s\\n' 'MyMelter PWA distribution' '1. Unzip this archive.' '2. GitHub Pages: upload all files from the MyMelter folder to the repo root.' '3. On iPhone, reopen Safari and update the MyMelter取込 bookmarklet for the latest version.' '4. Previously saved channels are held in browser localStorage, not this ZIP. Export user data before clearing Safari data.' '5. Cloudflare Worker is included separately in worker/worker.js; deploying GitHub Pages does not deploy Cloudflare.' > "dist/${TARGET}/UPDATE_README.txt"
+          (cd "dist/${TARGET}" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "dist/${TARGET}/SHA256SUMS.txt"
+          (cd "dist/${TARGET}" && sha256sum -c SHA256SUMS.txt)
+          (cd dist && zip -q -r "${TARGET}.zip" "${TARGET}")
+          (cd dist && sha256sum "${TARGET}.zip" > "${TARGET}.zip.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MyMelter-${{ github.sha }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 90

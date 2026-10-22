@@ -1,4 +1,17 @@
-# MyMelter PWA 1.7.2
+# MyMelter PWA 1.7.3
+
+## 1.7.3 — 動画・記事・画像の共通取り込み強化
+
+- Safari取込コードを **v24** へ更新。既存Safariブックマーク内の旧v23以前のコードは手動更新が必要です。
+- HTML5 `video` / `source` の遅延URL、動画URL付きdata属性、動画カードの詳細リンク、Open Graph動画メタ情報、JSON-LD VideoObjectを共通検出します。
+- サムネイルの `data-src`、`srcset`、`picture/source`、`figure`・ギャラリーの画像を取り込みます。
+- 動画のリンク先だけ存在するカードは「元ページ」と明示します。実動画URLを確証できない場合は空の動画プレイヤーに移しません。
+- Safari取込コードの広告判定で、通常タイトルの英字P・Rを誤って広告と見なす正規表現の不具合を修正しました。広告自体は引き続き除外します。
+- 動画カード・遅延画像・JSON-LD・記事を合成HTMLで回帰検証します。サイト固有の認証・DRM・CORS・Cloudflare制限を突破する機能はありません。
+- GitHub Actions の単体・Chromium試験が成功した公開版について、更新用ZIPとSHA256証跡をダウンロード可能なCI成果物として作成します。
+- iPhone Safari実機と権限制限のある実サイトの検証は PENDING のままです。自動試験だけで全サイト対応や完成を宣言しません。
+
+
 
 ## 1.7.2修正候補 — twi-dl.net Safari取込
 
