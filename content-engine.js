@@ -1,4 +1,4 @@
-/* MyMelter 1.7.3 unified content engine.
+/* MyMelter 1.7.4 unified content engine.
    Pure helpers shared by UI/import state. Site-specific extraction should feed evidence here,
    not decide final presentation by itself. */
 const MyMelterContentEngine=(()=>{

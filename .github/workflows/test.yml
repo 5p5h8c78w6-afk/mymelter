@@ -49,7 +49,7 @@ jobs:
           cp -R icons vendor "dist/${TARGET}/"
           cp worker/worker.js "dist/${TARGET}/worker/"
           printf '%s\\n' 'MyMelter PWA distribution' '1. Unzip this archive.' '2. GitHub Pages: upload all files from the MyMelter folder to the repo root.' '3. On iPhone, reopen Safari and update the MyMelter取込 bookmarklet for the latest version.' '4. Previously saved channels are held in browser localStorage, not this ZIP. Export user data before clearing Safari data.' '5. Cloudflare Worker is included separately in worker/worker.js; deploying GitHub Pages does not deploy Cloudflare.' > "dist/${TARGET}/UPDATE_README.txt"
-          (cd "dist/${TARGET}" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "dist/${TARGET}/SHA256SUMS.txt"
+          (cd "dist/${TARGET}" && find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum) > "dist/${TARGET}/SHA256SUMS.txt"
           (cd "dist/${TARGET}" && sha256sum -c SHA256SUMS.txt)
           (cd dist && zip -q -r "${TARGET}.zip" "${TARGET}")
           (cd dist && sha256sum "${TARGET}.zip" > "${TARGET}.zip.sha256")
