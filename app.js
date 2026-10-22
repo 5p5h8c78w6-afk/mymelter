@@ -76,7 +76,16 @@ function fmtDate(ts){ if(!ts) return ''; try { return new Intl.DateTimeFormat('j
 function typeLabel(type){ return ({video:'動画',image:'画像',article:'記事',feed:'RSS/Atom',mixed:'混在'})[type] || '混在'; }
 function typeGlyph(type){ return ({video:'▶',image:'▧',article:'≡',feed:'◎',mixed:'◇'})[type] || '◇'; }
 function colorForType(type){ return ({video:'red',image:'green',article:'purple',feed:'blue',mixed:'gold'})[type] || 'blue'; }
-function mediaKind(item){ return MyMelterContentEngine.kind(item||{}); }
+function isKnownVideoDetailLink(raw=''){
+  try{
+    const u=new URL(String(raw||''));
+    return /(^|\.)twi-dl\.net$/i.test(u.hostname)&&/^\/v\.php$/i.test(u.pathname)&&!!u.searchParams.get('video');
+  }catch{return false;}
+}
+function mediaKind(item){
+  if(item&&item.type==='image'&&isKnownVideoDetailLink(item.url))return 'video';
+  return MyMelterContentEngine.kind(item||{});
+}
 function adLikeText(text=''){return /(?:【PR】|\[PR\]|(^|\s)PR(?:\s|$)|広告|スポンサー|sponsored|advertisement|affiliate|アフィリエイト|promoted|promotion|amazonで|楽天で|詳しくはこちら)/i.test(String(text||''));}
 function adLikeElement(el){
   if(!el)return false;
@@ -88,7 +97,9 @@ function adLikeElement(el){
   const text=(el.textContent||'').replace(/\s+/g,' ').trim();
   return text.length>0&&text.length<=120&&/^(?:【PR】|\[PR\]|PR[:：\s]|広告[:：\s]|スポンサー[:：\s]|sponsored\b|advertisement\b|affiliate\b)/i.test(text);
 }
-function contentProfile(items=[]){ return MyMelterContentEngine.profile(items||[]); }
+function contentProfile(items=[]){
+  return MyMelterContentEngine.profile((items||[]).map(x=>mediaKind(x)==='video'&&x.type!=='video'?{...x,type:'video'}:x));
+}
 function preferredReaderMode(items=[]){const p=contentProfile(items);return p.mode==='video'?'video':p.mode==='image'?'media':'list';}
 function normalizeSimilarSiteUrl(raw=''){
   const url=normalizeUrl(raw);if(!url)return '';
@@ -101,7 +112,7 @@ function normalizeSimilarSiteUrl(raw=''){
 }
 function uniqueBy(arr, keyFn){ const seen=new Set(); return arr.filter(x=>{const k=keyFn(x); if(!k||seen.has(k)) return false; seen.add(k); return true;}); }
 function browserChannelItems(channel){
-  return MyMelterContentEngine.channelItems(channel||{}).slice(0,160);
+  return MyMelterContentEngine.channelItems(channel||{}).map(x=>mediaKind(x)==='video'&&x.type!=='video'?{...x,type:'video'}:x).slice(0,160);
 }
 function prioritizeImportedItems(items=[]){ return MyMelterContentEngine.mergeItems(items||[]); }
 function isMediaUrl(url=''){ return /\.(mp4|m4v|mov|webm|m3u8)(?:$|[?#])/i.test(url); }
@@ -1443,26 +1454,68 @@ async function fetchVideoDetailMarkup(url){
     throw error||new Error('ページを読み込めませんでした');
   }finally{clearTimeout(timer);}
 }
-async function checkVideoCandidate(item,button){
-  if(!item?.url||item.videoUrl)return;
-  if(button){button.disabled=true;button.dataset.oldLabel=button.textContent;button.textContent='動画を確認中…';}
+function ensureVideoEvidenceDialog(){
+  let d=document.getElementById('videoEvidenceDialog');
+  if(d)return d;
+  d=document.createElement('dialog');
+  d.id='videoEvidenceDialog';d.className='sheet-dialog';
+  d.innerHTML='<div class="sheet" style="max-width:440px"><div class="sheet-handle"></div><div class="sheet-head"><div><p class="eyebrow">VIDEO CHECK</p><h2>動画を確認</h2></div><button type="button" class="round-btn" data-evidence-close>×</button></div><strong data-evidence-title></strong><img data-evidence-poster alt="" style="display:block;max-width:100%;max-height:35vh;width:auto;object-fit:contain;border-radius:12px;margin:10px auto"><p data-evidence-status role="status" aria-live="polite" style="min-height:3em"></p><div class="button-row"><button type="button" class="primary" data-evidence-play hidden>再生する</button><button type="button" class="secondary" data-evidence-source>元ページを開く</button><button type="button" class="secondary" data-evidence-retry>再確認</button></div><p class="help">配信元の制限で動画を取得できないことがあります。サムネイルと元ページの情報は保持します。</p></div>';
+  document.body.appendChild(d);
+  d.querySelector('[data-evidence-close]').onclick=()=>{d._checkToken=null;d.close();};
+  d.querySelector('[data-evidence-source]').onclick=()=>{if(d._item?.url)window.open(d._item.url,'_blank','noopener');};
+  d.querySelector('[data-evidence-play]').onclick=()=>{
+    const item=d._item;if(!item?.videoUrl)return;
+    d.close();recordHistory(item,false);openVideoFeedItems([item],activeChannel?.name||item.channelName||'動画');
+  };
+  d.querySelector('[data-evidence-retry]').onclick=()=>{if(d._item)checkVideoCandidate(d._item,null,true);};
+  return d;
+}
+function renderVideoEvidenceDialog(d,item,message,canPlay=false){
+  if(!d||d._item!==item)return;
+  d.querySelector('[data-evidence-status]').textContent=message;
+  const play=d.querySelector('[data-evidence-play]');play.hidden=!canPlay;play.disabled=!canPlay;
+  d.querySelector('[data-evidence-retry]').disabled=false;
+}
+async function checkVideoCandidate(item,button,force=false){
+  if(!item?.url)return;
+  const d=ensureVideoEvidenceDialog();
+  d._item=item;
+  d.querySelector('[data-evidence-title]').textContent=item.title||'動画候補';
+  const poster=d.querySelector('[data-evidence-poster]');
+  if(item.image){poster.src=normalizeUrl(item.image)||'';poster.hidden=false;}else{poster.removeAttribute('src');poster.hidden=true;}
+  if(!d.open)d.showModal();
+  if(item.videoUrl&&!force){
+    renderVideoEvidenceDialog(d,item,'直接再生の候補があります。「再生する」を押してください。',true);
+    return;
+  }
+  const token=Symbol('video-check');d._checkToken=token;
+  d.querySelector('[data-evidence-retry]').disabled=true;
+  renderVideoEvidenceDialog(d,item,'詳細ページを確認しています。サムネイルはそのまま保持されます。',false);
+  d.querySelector('[data-evidence-retry]').disabled=true;
   try{
-    const detail=extractVideoDetail(await fetchVideoDetailMarkup(item.url),item.url);
+    const html=await fetchVideoDetailMarkup(item.url);
+    const detail=extractVideoDetail(html,item.url);
+    if(d._checkToken!==token)return;
     if(!detail.videoUrl){
-      toast('動画URLを確認できません。元ページから再生してください。');
+      renderVideoEvidenceDialog(d,item,'詳細ページは読めましたが、直接再生できる動画URLが見つかりません。元ページで再生を確認してください。',false);
       return;
     }
-    item.videoUrl=detail.videoUrl;if(!item.image&&detail.image)item.image=detail.image;
-    const update=arr=>{if(!Array.isArray(arr))return;for(const x of arr){if(x.url===item.url&&mediaKind(x)==='video'){x.videoUrl=item.videoUrl;if(!x.image&&item.image)x.image=item.image;}}};
+    item.videoUrl=detail.videoUrl;
+    if(!item.image&&detail.image)item.image=detail.image;
+    const update=arr=>{if(!Array.isArray(arr))return;for(const x of arr){if(x.url===item.url&&mediaKind(x)==='video'){x.type='video';x.videoUrl=item.videoUrl;if(!x.image)x.image=item.image;}}};
     update(activeItems);
     const channel=state.channels.find(x=>x.id===activeChannel?.id);
-    if(channel){update(channel.snapshotItems);update(channel.deepDiveItems);
-      for(const entries of Object.values(channel.categorySnapshots||{}))update(entries);
-    }
-    saveState(false);renderReader();recordHistory(item,false);
-    openVideoFeedItems([item],activeChannel?.name||item.channelName||'動画');
-  }catch(e){toast('取得できません。元ページから確認してください。');}
-  finally{if(button?.isConnected){button.disabled=false;button.textContent=button.dataset.oldLabel||'動画を確認';}}
+    if(channel){update(channel.snapshotItems);update(channel.deepDiveItems);for(const rows of Object.values(channel.categorySnapshots||{}))update(rows);}
+    saveState(false);
+    renderVideoEvidenceDialog(d,item,'動画URLの候補を検出しました。「再生する」を押してください。',true);
+    // Keep the existing gallery intact until the user explicitly closes this dialog.
+  }catch(e){
+    if(d._checkToken!==token)return;
+    const msg=/HTTP 40[13]/.test(String(e?.message||''))?'サイトが取得を制限しています。':e?.name==='AbortError'?'詳細ページの取得がタイムアウトしました。':'詳細ページを読み込めませんでした。';
+    renderVideoEvidenceDialog(d,item,msg+' Safariの元ページから確認してください。',false);
+  }finally{
+    if(d._checkToken===token)d.querySelector('[data-evidence-retry]').disabled=false;
+  }
 }
 function setReaderMode(mode,render=true){ activeReaderMode=mode; $$('#readerModeTabs button').forEach(b=>b.classList.toggle('active',b.dataset.readerMode===mode)); if(render)renderReader(); }
 function renderReader(){
