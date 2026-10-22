@@ -752,8 +752,12 @@ var parseRaw=function(doc,base){
   })
 };
 var adBox=function(el){
-  if(!el)return false;var m=((el.id||'')+' '+(el.className||'')+' '+(el.getAttribute&&el.getAttribute('aria-label')||'')).toLowerCase(),tx=X(el).slice(0,220);
-  return /(^|[ _-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([ _-]|$)/i.test(m)||/【PR】|\[PR\]|広告|スポンサー|sponsored|affiliate|アフィリエイト/i.test(tx)
+  if(!el)return false;
+  var meta=((el.id||'')+' '+(typeof el.className==='string'?el.className:'')+' '+(el.getAttribute&&el.getAttribute('aria-label')||'')).toLowerCase();
+  var tx=X(el).slice(0,180);
+  var structural=/(^|[\\s_-])(ad|ads|advert|advertisement|sponsor|sponsored|affiliate|banner|promo|promotion)([\\s_-]|$)/i.test(meta);
+  var disclosure=/^\\s*(?:【PR】|\\[PR\\]|PR[:：\\s]|広告[:：\\s]|スポンサー[:：\\s]|sponsored\\b|affiliate\\b|アフィリエイト[:：\\s])/i.test(tx);
+  return structural||disclosure
 };
 var sourceUrl=function(el,base){
   if(!el)return'';
