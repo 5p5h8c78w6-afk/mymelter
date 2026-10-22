@@ -1268,8 +1268,17 @@ function consumeBrowserImportHash(){
       [...items,...deepItems].forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       channel.snapshotItems=items; channel.deepDiveItems=deepItems; state.channels.unshift(channel); rememberItems([...items,...deepItems]);
     }
+    if(payload?.h&&Number(payload.v)>=27){
+      const raw=payload.h;
+      channel.browserImportEvidence={
+        total:Math.min(12,Math.max(0,Number(raw.total)||0)),
+        ok:Math.min(12,Math.max(0,Number(raw.ok)||0)),
+        failed:Math.min(12,Math.max(0,Number(raw.failed)||0)),
+        checkedAt:Date.now()
+      };
+    }
     state.meta.lastDiscoveryUrl=source; state.meta.lastDiscoveryAt=Date.now(); state.meta.browserImportVersion=Math.max(Number(state.meta.browserImportVersion||0),Number(payload?.v||0)); saveState(false);
-    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / カテゴリ '+(channel.categoryTabs?.length||0)+'件（事前取得 '+Object.keys(channel.categorySnapshots||{}).length+'件） / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<26?'（取込コードv26へ更新してください）':''));
+    toast('一覧 '+channel.snapshotItems.length+'件 / 深掘り '+channel.deepDiveItems.length+'件 / カテゴリ '+(channel.categoryTabs?.length||0)+'件（事前取得 '+Object.keys(channel.categorySnapshots||{}).length+'件） / 似たサイト '+(channel.relatedSites?.length||0)+'件'+(Number(payload?.v||0)<27?'（取込コードv27へ更新してください）':''));
     return channel;
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
@@ -1379,7 +1388,7 @@ async function openChannel(channel,keyword=''){
       let items=browserChannelItems(channel).map(x=>({...x,channelId:channel.id,channelName:channel.name}));
       if(keyword){const q=keyword.toLowerCase();items=items.filter(x=>(x.title||'').toLowerCase().includes(q));}
       activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); const profile=applyReaderProfile(channel,items); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
-      $('#readerStatus').textContent=`${items.length}件 · Safari取込 · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}${videoAvailabilityLabel(items)}`; renderReader(); return;
+      $('#readerStatus').textContent=`${items.length}件 · Safari取込 · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}${videoAvailabilityLabel(items)}${channel.browserImportEvidence?.total?' · Safari詳細確認'+channel.browserImportEvidence.ok+'/'+channel.browserImportEvidence.total+'件':''}`; renderReader(); return;
     }
     const text=await fetchText(url); if(!keyword){const cats=extractChannelCategories(text,url);if(cats.length)channel.categoryTabs=cats;} const loaded=keyword?{items:parseChannelContent(text,channel,url),pages:1,nextUrl:''}:await loadPaginatedChannelItems(channel,text,url,5); let items=loaded.items;
     if(keyword&&!channel.searchUrl){const q=keyword.toLowerCase();items=items.filter(x=>(x.title||'').toLowerCase().includes(q));}
@@ -2872,14 +2881,14 @@ function webSimilarSearchQuery(channel){
 }
 function renderWebSimilarFallback(channel,message=''){
   const text=message||'元ページ内に十分な関連リンクがありません。Web検索から候補を探せます。';
-  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv26への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
+  $('#discoverResults').innerHTML=`<div class="browser-fallback-card web-similar-fallback"><strong>Webから似たサイトを探す</strong><small>${esc(text)}<br>検索結果が開いたらSafariのブックマーク「MyMelter取込」を実行してください。初回だけv27への更新が必要です。</small><button type="button" class="primary" data-web-similar-channel="${esc(channel.id)}">Webから探す</button></div>`;
 }
 function startWebSimilarSearch(channel){
   if(!channel)return;
   const query=webSimilarSearchQuery(channel),url='https://html.duckduckgo.com/html/?q='+encodeURIComponent(query);
   state.meta.pendingWebSimilar={channelId:channel.id,query,at:Date.now()};saveState(false);
   const v=Number(state.meta.browserImportVersion||channel.relatedSitesVersion||0);
-  toast(v<26?'検索結果でv26の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
+  toast(v<27?'検索結果でv27の「MyMelter取込」を実行してください':'検索結果で「MyMelter取込」を実行してください');
   const win=window.open(url,'_blank','noopener');if(!win)window.location.href=url;
 }
 async function runSimilarDiscovery(channel){
