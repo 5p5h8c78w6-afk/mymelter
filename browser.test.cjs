@@ -63,6 +63,46 @@ assert.equal(twidlSynthetic.items[0].media,'https://video.twimg.com/demo/a.mp4')
 assert.equal(twidlSynthetic.items[1].media,'');
 
 
+const twidlVariant=await page.evaluate(async()=>{
+ const html='<html><head><title>Twitter動画保管庫</title></head><body><main>'+
+  '<figure class="media-tile"><a href="/watch/clip-alpha"><img data-src="/alpha.jpg" alt="Video alpha"></a></figure>'+
+  '<div class="media-tile" data-href="/v.php?video=77777777777777"><img data-original="/beta.jpg" alt="Video beta"></div>'+
+  '<div class="advertisement"><a href="/watch/promoted"><img src="/ad.jpg" alt="広告"></a></div>'+
+  '<a href="/?p=1">次のページへ</a></main></body></html>';
+ const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL('https://www.twi-dl.net/hozon.php');
+ const runner=new Function('document','location','alert','fetch','return '+buildBrowserImportBookmarklet().slice('javascript:'.length));
+ let error='';
+ await runner(doc,loc,msg=>error=String(msg),async u=>({ok:true,text:async()=>String(u).includes('clip-alpha')?
+  '<html><head><meta property="og:video:url" content="https://cdn.example/clip-alpha.mp4"></head></html>':
+  '<html><body><video poster="/beta-poster.jpg"><source src="https://video.twimg.com/video/beta.mp4"></video></body></html>'}));
+ const packed=loc.hash.startsWith('#mmimport=')?loc.hash.slice('#mmimport='.length):'';
+ if(!packed)return {error,items:[]};
+ const data=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(packed)),c=>c.charCodeAt(0))));
+ return {error,items:data.i.map(x=>({url:x.u,media:x.m,image:x.i,type:x.y})),next:data.d.map(x=>x.u)};
+});
+assert.equal(twidlVariant.error,'');
+assert.equal(twidlVariant.items.length,2);
+assert.deepEqual(twidlVariant.items.map(x=>x.url),['https://www.twi-dl.net/watch/clip-alpha','https://www.twi-dl.net/v.php?video=77777777777777']);
+assert.deepEqual(twidlVariant.items.map(x=>x.media),['https://cdn.example/clip-alpha.mp4','https://video.twimg.com/video/beta.mp4']);
+assert.deepEqual(twidlVariant.items.map(x=>x.type),['video','video']);
+const detailResolution=await page.evaluate(async()=>{
+ const pure=extractVideoDetail('<html><head><meta property="og:video:url" content="https://cdn.example/one.m3u8"><meta property="og:image" content="/cover.jpg"></head></html>','https://source.example/watch/1');
+ const invalid=extractVideoDetail('<html><body><img src="/poster.jpg"><p>No source available</p></body></html>','https://source.example/watch/2');
+ let opened=0;
+ const saved=fetchVideoDetailMarkup,oldFeed=openVideoFeedItems;
+ fetchVideoDetailMarkup=async()=>'<html><body><video><source src="https://cdn.example/playable.mp4"></video></body></html>';
+ openVideoFeedItems=()=>opened++;
+ const item={id:'check-video',type:'video',title:'Sample',url:'https://source.example/watch/2',image:'',videoUrl:''};
+ await checkVideoCandidate(item,null);
+ fetchVideoDetailMarkup=saved;openVideoFeedItems=oldFeed;
+ return {pure,invalid,media:item.videoUrl,opened};
+});
+assert.equal(detailResolution.pure.videoUrl,'https://cdn.example/one.m3u8');
+assert.equal(detailResolution.pure.image,'https://source.example/cover.jpg');
+assert.equal(detailResolution.invalid.videoUrl,'');
+assert.equal(detailResolution.media,'https://cdn.example/playable.mp4');
+assert.equal(detailResolution.opened,1);
+
 const generalImport=await page.evaluate(async()=>{
   const run=async(html,url)=>{
     const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL(url);
