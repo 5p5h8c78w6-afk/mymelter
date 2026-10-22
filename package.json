@@ -1,1 +1,1 @@
-{"name":"mymelter","version":"1.7.3","private":true,"scripts":{"test":"node --test features.test.cjs content-engine.test.cjs worker/worker.version.test.mjs","test:browser":"node browser.test.cjs"},"devDependencies":{"playwright":"1.55.0"}}
+{"name":"mymelter","version":"1.7.4","private":true,"scripts":{"test":"node --test features.test.cjs content-engine.test.cjs worker/worker.version.test.mjs","test:browser":"node browser.test.cjs"},"devDependencies":{"playwright":"1.55.0"}}
