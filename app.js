@@ -2372,7 +2372,7 @@ if(importedBrowserResult?.kind==='web-search'){
 
 function similarCandidateSignals(name='',url='',context='',rel=''){
   const text=`${name} ${url} ${context} ${rel}`,label=String(name||'').trim(),host=domainOf(url).toLowerCase();
-  const generic=/^(保存|開く|詳細|こちら|もっと見る|続きを読む|今すぐ|無料|登録|入会|ダウンロード|download|open|more)$/i.test(label);
+  const generic=/^(保存|開く|詳細|こちら|もっと見る|続きを読む|今すぐ|無料|登録|入会|ログイン|新規登録|サインイン|サインアップ|ダウンロード|download|open|more|login|log[ -]?in|sign[ -]?(in|up)|register)$/i.test(label);
   const ad=/(?:【PR】|\[PR\]|(^|\s)PR(?:\s|$)|広告|スポンサー|sponsored|アフィリエイト|affiliate|アダルトチャット|チャット広告|キャンペーン|promoted|promotion)/i.test(text);
   const adHost=/(^|\.)(doubleclick\.net|googlesyndication\.com|adservice\.google\.com|adnxs\.com|taboola\.com|outbrain\.com|criteo\.com|exoclick\.com|trafficjunky\.com|popads\.net|propellerads\.com|adsterra\.com)$/i.test(host);
   const relation=/関連|おすすめ|姉妹|相互|リンク集|友達|related|recommend|partner|similar/i.test(`${context} ${rel}`);
