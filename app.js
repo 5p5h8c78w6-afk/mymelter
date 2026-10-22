@@ -888,7 +888,7 @@ var parseAll=function(doc,base){
   parseTwiDl(doc,base);
   parseVideoCards(doc,base);
   parseVideoMetadata(doc,base);
-  var host=';try{host=new URL(base).hostname}catch(e){}
+  var host='';try{host=new URL(base).hostname}catch(e){}
   if(/(^|\.)twidouga\.net$/i.test(host)){parseTw(doc,base);parseRaw(doc,base)}
   parseGeneric(doc,base)
 };
