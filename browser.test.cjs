@@ -47,7 +47,7 @@ const twidlSynthetic=await page.evaluate(async()=>{
   const run=new Function('document','location','alert','fetch','return '+script);
   let error='';
   await run(doc,loc,t=>{error=String(t)},async u=>({ok:true,text:async()=>String(u).includes('1234567890123456789')?'<video><source src="https://video.twimg.com/demo/a.mp4"></video>':'<div>元データなし</div>'}));
-  if(!loc.hash.startsWith('#mmimport='))return {error,pre,items:[],probe:window.__genericProbe};
+  if(!loc.hash.startsWith('#mmimport='))return {error,items:[]};
   const packed=loc.hash.slice('#mmimport='.length),bytes=Uint8Array.from(atob(decodeURIComponent(packed)),c=>c.charCodeAt(0));
   const data=JSON.parse(new TextDecoder().decode(bytes));
   return {error,items:data.i.map(x=>({url:x.u,image:x.i,media:x.m,kind:x.y}))};
@@ -66,14 +66,12 @@ assert.equal(twidlSynthetic.items[1].media,'');
 const generalImport=await page.evaluate(async()=>{
   const run=async(html,url)=>{
     const doc=new DOMParser().parseFromString(html,'text/html'),loc=new URL(url);
-    const pre={url:loc.href,count:doc.querySelectorAll('[class*="video-card"]').length,anchors:doc.querySelectorAll('a[href]').length,images:doc.querySelectorAll('main img').length};
-    const originalScript=buildBrowserImportBookmarklet().slice('javascript:'.length);
-    const script=originalScript.replace('var primary=compactItems(', 'window.__genericProbe={raw:I.map(x=>({u:x.u,i:x.i,m:x.m,y:x.y})),card:document.querySelectorAll(\'[class*="video-card"]\').length,ad:(document.querySelector(\'[class*="video-card"]\')?adBox(document.querySelector(\'[class*="video-card"]\')):null),img:G(document.querySelector(\'[class*="video-card"] img\'),location.href)};var primary=compactItems(');
+    const script=buildBrowserImportBookmarklet().slice('javascript:'.length);
     const execute=new Function('document','location','alert','fetch','return '+script);
     let error='';await execute(doc,loc,m=>error=String(m),async()=>({ok:false}));
-    if(!loc.hash.startsWith('#mmimport='))return {error,pre,probe:window.__genericProbe,items:[]};
+    if(!loc.hash.startsWith('#mmimport='))return {error,items:[]};
     const data=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(loc.hash.slice(10))),c=>c.charCodeAt(0))));
-    return {error,pre,probe:window.__genericProbe,items:[...data.i,...data.d].map(x=>({url:x.u,image:x.i,video:x.m,type:x.y,title:x.t}))};
+    return {error,items:[...data.i,...data.d].map(x=>({url:x.u,image:x.i,video:x.m,type:x.y,title:x.t}))};
   };
   const videoCard=await run('<html><head><title>Clips</title></head><body><main><div class="video-card"><a href="/watch/episode-7"><img data-src="/poster.jpg" alt="Episode 7">Watch Episode 7</a></div></main></body></html>','https://clips.example/');
   const lazyGallery=await run('<html><body><section class="gallery"><figure><img data-src="/photo1.jpg" alt="Photo A" width="640" height="480"></figure><figure><picture><source srcset="/photo2.webp 2x"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Photo B" width="640" height="480"></picture></figure></section></body></html>','https://gallery.example/');
@@ -82,7 +80,6 @@ const generalImport=await page.evaluate(async()=>{
   const article=await run('<html><body><main><article class="post"><h2><a href="/story">Important story</a></h2><img src="/thumb.jpg" width="320" height="220"><p>Ordinary article content and commentary.</p></article></main></body></html>','https://news.example/');
   return {videoCard,lazyGallery,htmlVideo,jsonLd,article};
 });
-console.log('general fixture',JSON.stringify(generalImport));
 assert.equal(generalImport.videoCard.error,'');
 assert.equal(generalImport.videoCard.items.length,1);
 assert.equal(generalImport.videoCard.items[0].type,'video');
