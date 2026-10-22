@@ -1,4 +1,4 @@
-const APP_VERSION = '1.7.4';
+const APP_VERSION = '1.7.5';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -498,49 +498,134 @@ function parseFeed(xml,channel,baseUrl){
     if(!image){ const html=nodeText(entry,['description','summary','content']); if(html){const d=new DOMParser().parseFromString(html,'text/html'); image=absoluteUrl(d.querySelector('img')?.getAttribute('src')||'',baseUrl);} }
     link=absoluteUrl(link||mediaUrl,baseUrl);
     const publishedRaw=nodeText(entry,['pubDate','published','updated','date']); const publishedAt=Date.parse(publishedRaw)||0;
-    return {id:uid(),title,url:link,image,videoUrl,type:videoUrl?'video':image?'image':'article',channelId:channel.id,channelName:channel.name,publishedAt};
+    return {id:uid(),title,url:link,image,videoUrl,type:videoUrl?'video':channel.type==='image'&&image?'image':'article',channelId:channel.id,channelName:channel.name,publishedAt};
   }).filter(x=>x.url);
 }
 function parseSitemap(xml,channel){
   const locs=[...xml.querySelectorAll('url > loc, sitemap > loc')].map(x=>x.textContent.trim()).filter(Boolean);
   return locs.slice(0,200).map(url=>{let title='ページ';try{const u=new URL(url);title=decodeURIComponent(u.pathname.split('/').filter(Boolean).pop()||u.hostname).replace(/[-_]/g,' ');}catch{}return{id:uid(),title,url,type:'article',channelId:channel.id,channelName:channel.name};});
 }
+function imageUrlFromElement(img,base){
+  if(!img)return '';
+  const candidates=[
+    img.getAttribute('data-src'),img.getAttribute('data-original'),
+    img.getAttribute('data-lazy-src'),img.getAttribute('data-url'),
+    img.getAttribute('data-srcset'),img.getAttribute('srcset'),
+    img.getAttribute('src'),img.currentSrc
+  ];
+  const picture=img.closest('picture');
+  if(picture){const source=picture.querySelector('source[data-srcset],source[srcset]');if(source)candidates.push(source.getAttribute('data-srcset')||source.getAttribute('srcset'));}
+  for(const value of candidates){
+    let raw=String(value||'').trim();if(!raw||/^(?:data|blob|javascript|about):/i.test(raw))continue;
+    if(raw.includes(',')||/\s+\d+(?:w|x)(?:\s|$)/.test(raw))raw=(raw.split(',')[0]||'').trim().split(/\s+/)[0]||'';
+    const result=absoluteUrl(raw,base);if(result)return result;
+  }
+  return '';
+}
+function posterUrlFromNode(node,base){
+  const img=node.matches?.('img')?node:node.querySelector?.('img');
+  const image=imageUrlFromElement(img,base);if(image)return image;
+  const video=node.matches?.('video')?node:node.querySelector?.('video[poster]');
+  const poster=absoluteUrl(video?.getAttribute('poster')||'',base);if(poster)return poster;
+  const bg=node.getAttribute?.('style')||node.querySelector?.('[style*="background"]')?.getAttribute('style')||'';
+  const hit=bg.match(/background(?:-image)?\s*:\s*url\(\s*['"]?([^'")]+)/i);
+  return hit?absoluteUrl(hit[1],base):'';
+}
+function playableVideoFromNode(node,base){
+  const probes=[];
+  if(node.matches?.('video,source,[data-video-url],[data-video-src]'))probes.push(node);
+  if(node.querySelectorAll)probes.push(...node.querySelectorAll('video,video source,source[src],source[data-src],[data-video-url],[data-video-src],a[href*=".mp4"],a[href*=".m3u8"],a[href*=".webm"]'));
+  for(const p of probes.slice(0,30)){
+    for(const key of ['data-video-url','data-video-src','src','data-src','href']){
+      const media=absoluteUrl(p.getAttribute?.(key)||'',base);
+      if(media&&isMediaUrl(media))return media;
+    }
+  }
+  return '';
+}
+function videoEvidence(node,link,image){
+  const cls=String(typeof node.className==='string'?node.className:'')+' '+String(node.getAttribute?.('data-type')||'');
+  const strong=/(^|[\s_-])(video|movie|clip|reel)([\s_-]|$)/i.test(cls);
+  const route=/(?:\/(?:watch|videos?|clips?|reels?)(?:\/|$)|\/v\.php\?video=\d+)/i.test(link||'');
+  return node.matches?.('video')||strong||!!node.querySelector?.('video,[data-video-url],[data-video-src]')||(route&&!!image);
+}
+function structuredVideoItems(doc,channel,base){
+  const output=[];
+  const add=(title,url,image,video)=>{
+    const videoUrl=absoluteUrl(video,base),page=absoluteUrl(url,base)||absoluteUrl(base,base);
+    if(!videoUrl||!isMediaUrl(videoUrl)||!page)return;
+    output.push({id:uid(),title:String(title||doc.title||'動画').slice(0,240),url:page,image:absoluteUrl(image,base),videoUrl,type:'video',channelId:channel.id,channelName:channel.name});
+  };
+  const meta=doc.querySelector('meta[property="og:video:secure_url"],meta[property="og:video:url"],meta[property="og:video"],meta[name="twitter:player:stream"]');
+  const image=doc.querySelector('meta[property="og:image"],meta[name="twitter:image"]')?.getAttribute('content')||'';
+  if(meta)add(doc.title,base,image,meta.getAttribute('content'));
+  for(const script of [...doc.querySelectorAll('script[type="application/ld+json"]')].slice(0,8)){
+    let root;try{root=JSON.parse(script.textContent||'')}catch{continue}
+    const queue=[root];let limit=0;
+    while(queue.length&&limit++<60){
+      const item=queue.shift();
+      if(Array.isArray(item)){queue.push(...item.slice(0,20));continue}
+      if(!item||typeof item!=='object')continue;
+      for(const k of ['@graph','mainEntity','itemListElement','item'])if(item[k])queue.push(item[k]);
+      const types=Array.isArray(item['@type'])?item['@type']:[item['@type']];
+      if(!types.some(x=>String(x)==='VideoObject'))continue;
+      const u=item.contentUrl||item.embedUrl||'';
+      const video=typeof u==='string'?u:u?.url||'';
+      const thumb=Array.isArray(item.thumbnailUrl)?item.thumbnailUrl[0]:item.thumbnailUrl;
+      add(item.name,item.url||base,thumb||image,video);
+    }
+  }
+  return output;
+}
 function genericNodes(doc){
-  const candidates=['main > article,main > section,main > .post,main > .entry,main > .item,main > .card','article','main .post','main .item','main .card','main li','.post','.entry','.item','.card'];
+  const candidates=[
+    'main > article,main > section,main > .post,main > .entry,main > .item,main > .card',
+    'article','main .post','main .item','main .card',
+    'main [class*="video-card"],main [class*="video-item"],main [class*="video-tile"],main [class*="clip-card"]',
+    'main li','.post','.entry','.item','.card'
+  ];
   let singleCard=[];
   for(const sel of candidates){
-    let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{}
-    nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href]')&&((n.textContent||'').trim().length>3||!!n.querySelector('video[src],video source[src],img')));
+    let nodes=[];try{nodes=[...doc.querySelectorAll(sel)]}catch{}
+    nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href],video,[data-video-src],[data-video-url]')&&((n.textContent||'').trim().length>3||!!n.querySelector('video,source,img')));
     if(nodes.length>=2)return nodes.slice(0,160);
     if(!singleCard.length&&nodes.length)singleCard=nodes;
   }
   const textLinks=[...doc.querySelectorAll('main a[href],article a[href],a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('li,article,div,section')||a)&&(a.textContent||'').trim().length>3);
   if(textLinks.length>=2)return textLinks.slice(0,160);
   if(singleCard.length)return singleCard;
-  const imageLinks=[...doc.querySelectorAll('a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('figure,div,section')||a)&&a.querySelector('img'));
+  const imageLinks=[...doc.querySelectorAll('a[href]')].filter(a=>!a.closest('nav,header,footer,aside')&&!adLikeElement(a.closest('figure,div,section')||a)&&a.querySelector('img,picture'));
   return (imageLinks.length?imageLinks:textLinks).slice(0,160);
 }
 function parseHtml(text,channel,baseUrl){
-  const doc=new DOMParser().parseFromString(text,'text/html'); let nodes=[];
-  if(channel.selectors?.item){ try{nodes=[...doc.querySelectorAll(channel.selectors.item)];}catch{} }
-  if(!nodes.length) nodes=genericNodes(doc);
+  const doc=new DOMParser().parseFromString(text,'text/html');let nodes=[];
+  if(channel.selectors?.item){try{nodes=[...doc.querySelectorAll(channel.selectors.item)]}catch{}}
+  if(!nodes.length)nodes=genericNodes(doc);
   const items=nodes.filter(node=>!adLikeElement(node)).map((node,idx)=>{
-    let title=selectorValue(node,channel.selectors?.title,'title')||nodeText(node,['h1','h2','h3','h4','.title','a[title]'])||(node.matches?.('a')?node.textContent.trim():'')||`Item ${idx+1}`;
-    let link=selectorValue(node,channel.selectors?.link,'link')||attrFrom(node,['a[href]'],['href'])||(node.matches?.('a')?node.getAttribute('href'):'');
-    let image=selectorValue(node,channel.selectors?.image,'image')||attrFrom(node,['img'],['src','data-src','data-lazy-src']);
-    let videoUrl=selectorValue(node,channel.selectors?.video,'video')||attrFrom(node,['video[src]','video source[src]','source[src]','a[href$=".mp4"]','a[href*=".m3u8"]'],['src','href']);
-    link=absoluteUrl(link,baseUrl); image=absoluteUrl(image,baseUrl); videoUrl=absoluteUrl(videoUrl,baseUrl);
-    if(!videoUrl&&isMediaUrl(link)) videoUrl=link; if(!image&&isImageUrl(link)) image=link;
+    const anchor=node.matches?.('a[href]')?node:node.querySelector?.('a[href]');
+    const link=absoluteUrl(selectorValue(node,channel.selectors?.link,'link')||anchor?.getAttribute('href')||'',baseUrl);
+    const titleNode=node.querySelector?.('h1,h2,h3,h4,.title')||anchor||node;
+    let title=selectorValue(node,channel.selectors?.title,'title')||(titleNode.textContent||'').trim()||anchor?.getAttribute('title')||node.querySelector?.('img')?.getAttribute('alt')||'Item '+(idx+1);
+    const customImage=selectorValue(node,channel.selectors?.image,'image');
+    const image=absoluteUrl(customImage,baseUrl)||posterUrlFromNode(node,baseUrl)|| (isImageUrl(link)?link:'');
+    const customVideo=selectorValue(node,channel.selectors?.video,'video');
+    let videoUrl=absoluteUrl(customVideo,baseUrl)||playableVideoFromNode(node,baseUrl);
+    if(videoUrl&&!isMediaUrl(videoUrl))videoUrl='';
+    if(!videoUrl&&isMediaUrl(link))videoUrl=link;
     const articleish=!!node.matches?.('article,.post,.entry,[class*="article"],[class*="post"],[class*="news"]')||!!node.querySelector?.('p,h1,h2,h3');
-    const videoish=!!node.matches?.('video,[class*="video"],[class*="movie"]')||/\b(video|movie|動画)\b/i.test((node.className||'')+' '+title);
-    if(articleish&&!videoish&&channel.type!=='video') videoUrl='';
-    let type=articleish&&!videoish?'article':videoUrl?'video':image?'image':'article';
+    const videoish=!!videoUrl&&(!articleish||channel.type==='video')||!!videoEvidence(node,link,image);
+    if(articleish&&!videoish&&channel.type!=='video')videoUrl='';
+    let type=videoish?'video':articleish?'article':image?'image':'article';
     if(channel.type==='article'&&type!=='video')type='article';
     if(channel.type==='image'&&!videoUrl&&image&&!articleish)type='image';
     const excerpt=nodeText(node,['p','.excerpt','.summary','.description']).replace(/\s+/g,' ').trim().slice(0,500);
-    const timeEl=node.querySelector?.('time[datetime], [data-date], [data-published]'); const publishedRaw=timeEl?.getAttribute?.('datetime')||timeEl?.getAttribute?.('data-date')||timeEl?.getAttribute?.('data-published')||''; const publishedAt=Date.parse(publishedRaw)||0;
-    return {id:uid(),title:title.replace(/\s+/g,' ').trim().slice(0,300),url:link,image,videoUrl,type,excerpt,channelId:channel.id,channelName:channel.name,publishedAt};
+    const timeEl=node.querySelector?.('time[datetime], [data-date], [data-published]');
+    const publishedRaw=timeEl?.getAttribute?.('datetime')||timeEl?.getAttribute?.('data-date')||timeEl?.getAttribute?.('data-published')||'';
+    return {id:uid(),title:title.replace(/\s+/g,' ').trim().slice(0,300),url:link||videoUrl,image,videoUrl,type,excerpt,channelId:channel.id,channelName:channel.name,publishedAt:Date.parse(publishedRaw)||0};
   }).filter(x=>x.url&&x.title&&!adLikeText(x.title));
+  // Metadata describes a page's own video. It is fallback evidence, not an ad
+  // or an extra duplicate row beside a valid multi-item listing.
+  if(items.length<=1)items.push(...structuredVideoItems(doc,channel,baseUrl));
   return MyMelterContentEngine.mergeItems(items).slice(0,160);
 }
 function parseChannelContent(text,channel,baseUrl){
@@ -1223,14 +1308,20 @@ async function openChannel(channel,keyword=''){
       let items=browserChannelItems(channel).map(x=>({...x,channelId:channel.id,channelName:channel.name}));
       if(keyword){const q=keyword.toLowerCase();items=items.filter(x=>(x.title||'').toLowerCase().includes(q));}
       activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); const profile=applyReaderProfile(channel,items); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
-      $('#readerStatus').textContent=`${items.length}件 · Safari取込 · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}`; renderReader(); return;
+      $('#readerStatus').textContent=`${items.length}件 · Safari取込 · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}${videoAvailabilityLabel(items)}`; renderReader(); return;
     }
     const text=await fetchText(url); if(!keyword){const cats=extractChannelCategories(text,url);if(cats.length)channel.categoryTabs=cats;} const loaded=keyword?{items:parseChannelContent(text,channel,url),pages:1,nextUrl:''}:await loadPaginatedChannelItems(channel,text,url,5); let items=loaded.items;
     if(keyword&&!channel.searchUrl){const q=keyword.toLowerCase();items=items.filter(x=>(x.title||'').toLowerCase().includes(q));}
     activeItems=items; rememberItems(items); channel.itemCount=items.length; channel.lastOpenedAt=Date.now(); channel.updatedAt=Date.now(); channel.autoLoadedPages=loaded.pages; const profile=applyReaderProfile(channel,items); saveState(false); renderHomeChannels(); renderRanking(); renderChannelManager();
-    $('#readerStatus').textContent=items.length?`${items.length}件取得 · ${loaded.pages>1?loaded.pages+'ページ自動読込 · ':''}${domainOf(url)} · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}`:'項目を抽出できませんでした。高度な抽出設定を調整してください。';
+    $('#readerStatus').textContent=items.length?`${items.length}件取得 · ${loaded.pages>1?loaded.pages+'ページ自動読込 · ':''}${domainOf(url)} · ${profile.mode==='video'?'動画中心':profile.mode==='image'?'画像中心':profile.mode==='article'?'記事中心':'混在'}${videoAvailabilityLabel(items)}`:'項目を抽出できませんでした。元ページを開くか、Safari取り込みをお試しください。';
     renderReader();
-  }catch(e){ $('#readerStatus').textContent=`取得できませんでした：${e.message}`; $('#readerContent').innerHTML=`<div class="empty-card"><strong>取得エラー</strong><br>${esc(e.message)}<br><br><button class="primary" data-open-url="${esc(url)}">サイトを直接開く</button></div>`; }
+  }catch(e){ $('#readerStatus').textContent=`取得できませんでした：${e.message}`; $('#readerContent').innerHTML=`<div class="empty-card"><strong>取得エラー</strong><br>${esc(e.message)}<br><br><button class="primary" data-open-url="${esc(url)}">サイトを直接開く</button><button class="primary" data-browser-import-target="${esc(url)}">Safari取り込みを使う</button></div>`; }
+}
+function videoAvailabilityLabel(items=[]){
+  const videos=items.filter(x=>mediaKind(x)==='video');
+  if(!videos.length)return '';
+  const playable=videos.filter(x=>!!x.videoUrl).length;
+  return ' · 動画'+videos.length+'件（直接再生'+playable+'・元ページ'+(videos.length-playable)+'）';
 }
 function activeVideoItems(){
   const primary=(activeItems||[]).filter(x=>mediaKind(x)==='video'&&x?.videoUrl);
@@ -1253,7 +1344,7 @@ function activeVideoCandidates(){
 }
 function setReaderMode(mode,render=true){ activeReaderMode=mode; $$('#readerModeTabs button').forEach(b=>b.classList.toggle('active',b.dataset.readerMode===mode)); if(render)renderReader(); }
 function renderReader(){
-  const root=$('#readerContent'); if(!activeItems.length){root.innerHTML=`<div class="empty-card">表示できる項目がありません。</div>`;return;}
+  const root=$('#readerContent'); if(!activeItems.length){const url=activeChannel?.url||'';root.innerHTML=`<div class="empty-card"><strong>項目が見つかりませんでした</strong><p>サイトの読み込み方式によっては、Safariから取り込む必要があります。</p><div class="button-row"><button type="button" class="secondary" data-open-url="${esc(url)}">元サイトを開く</button><button type="button" class="primary" data-browser-import-target="${esc(url)}">Safari取り込みを使う</button></div></div>`;return;}
   if(activeReaderMode==='video'){
     const vids=activeVideoCandidates();
     root.innerHTML=videoCategoryStripHTML()+ (vids.length?`<div class="video-gallery">${vids.map((x,i)=>videoGalleryItemHTML(x,i)).join('')}</div>`:`<div class="empty-card">この一覧に動画の候補は見つかりませんでした。</div>`); return;
