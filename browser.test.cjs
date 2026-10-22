@@ -71,7 +71,7 @@ const generalImport=await page.evaluate(async()=>{
     const script=originalScript.replace('var primary=compactItems(', 'window.__genericProbe={raw:I.map(x=>({u:x.u,i:x.i,m:x.m,y:x.y})),card:document.querySelectorAll(\'[class*="video-card"]\').length,ad:(document.querySelector(\'[class*="video-card"]\')?adBox(document.querySelector(\'[class*="video-card"]\')):null),img:G(document.querySelector(\'[class*="video-card"] img\'),location.href)};var primary=compactItems(');
     const execute=new Function('document','location','alert','fetch','return '+script);
     let error='';await execute(doc,loc,m=>error=String(m),async()=>({ok:false}));
-    if(!loc.hash.startsWith('#mmimport='))return {error,items:[]};
+    if(!loc.hash.startsWith('#mmimport='))return {error,pre,probe:window.__genericProbe,items:[]};
     const data=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(loc.hash.slice(10))),c=>c.charCodeAt(0))));
     return {error,pre,probe:window.__genericProbe,items:[...data.i,...data.d].map(x=>({url:x.u,image:x.i,video:x.m,type:x.y,title:x.t}))};
   };
