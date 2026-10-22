@@ -510,7 +510,7 @@ function genericNodes(doc){
   let singleCard=[];
   for(const sel of candidates){
     let nodes=[];try{nodes=[...doc.querySelectorAll(sel)];}catch{}
-    nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href]')&&(n.textContent||'').trim().length>3);
+    nodes=nodes.filter(n=>!adLikeElement(n)&&!n.closest('nav,header,footer,aside')&&n.querySelector('a[href]')&&((n.textContent||'').trim().length>3||!!n.querySelector('video[src],video source[src],img')));
     if(nodes.length>=2)return nodes.slice(0,160);
     if(!singleCard.length&&nodes.length)singleCard=nodes;
   }
