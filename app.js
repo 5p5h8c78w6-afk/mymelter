@@ -1,4 +1,4 @@
-const APP_VERSION = '1.7.9';
+const APP_VERSION = '1.8.0';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
