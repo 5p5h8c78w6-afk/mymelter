@@ -461,6 +461,62 @@ const videoFirst=await page.evaluate(()=>{
   document.querySelector('[data-video-gallery-open="1"]').click();openVideoFeedItems=oldOpen;
   return {mode:p.mode,videoFirst:screen.classList.contains('video-first'),cards:cards.length,opened,toolbar:getComputedStyle(document.querySelector('.reader-toolbar')).display,status:getComputedStyle(document.querySelector('.reader-status')).display};
 });assert.equal(videoFirst.mode,'video');assert.equal(videoFirst.videoFirst,true);assert.equal(videoFirst.cards,3);assert.deepEqual(videoFirst.opened,{count:3,title:'動画中心',start:1});assert.equal(videoFirst.toolbar,'none');assert.equal(videoFirst.status,'none');
+const iosPlaybackRegression=await page.evaluate(()=>{
+  const originalPlay=HTMLMediaElement.prototype.play,originalLoad=HTMLMediaElement.prototype.load;
+  let synchronousCalls=0;
+  HTMLMediaElement.prototype.play=function(){synchronousCalls++;return Promise.resolve()};
+  HTMLMediaElement.prototype.load=function(){};
+  let result={};
+  try{
+    const item={id:'ios-direct',url:'https://posts.example/v1',type:'video',videoUrl:'https://media.example/fixture.mp4',image:'https://media.example/poster.jpg',title:'120 second clip'};
+    openVideoFeedItems([item],'Safari launch test',0);
+    const v=document.querySelector('#videoFeed .video-slide video[data-feed-video]'),
+          slide=v?.closest('.video-slide');
+    result.sameGesturePlays=synchronousCalls;
+    result.hasSrc=!!v?.getAttribute('src');
+    result.shouldPlay=v?.dataset.shouldPlay;
+    result.webKitInline=!!v?.hasAttribute('webkit-playsinline');
+    Object.defineProperty(v,'duration',{configurable:true,get:()=>120});
+    v.dispatchEvent(new Event('loadedmetadata'));
+    result.sourceAfterLongMetadata=!!v.getAttribute('src');
+    result.hasLongMode=slide.classList.contains('system-long-video');
+    result.poster=v.getAttribute('poster');
+  }finally{
+    const dialog=document.getElementById('videoFeedDialog');
+    if(dialog?.open)dialog.close();
+    clearFeedPlaybackWatchdog();
+    HTMLMediaElement.prototype.play=originalPlay;
+    HTMLMediaElement.prototype.load=originalLoad;
+  }
+  return result;
+});
+assert.ok(iosPlaybackRegression.sameGesturePlays>=1,'play() must execute in original tap stack');
+assert.equal(iosPlaybackRegression.hasSrc,true);
+assert.equal(iosPlaybackRegression.shouldPlay,'1');
+assert.equal(iosPlaybackRegression.webKitInline,true);
+assert.equal(iosPlaybackRegression.sourceAfterLongMetadata,true,'120-second videos may not lose their src');
+assert.equal(iosPlaybackRegression.hasLongMode,false,'long media may not be replaced with a blank placeholder');
+assert.equal(iosPlaybackRegression.poster,'https://media.example/poster.jpg');
+
+const videoFailureDiagnostics=await page.evaluate(()=>{
+  const slide=document.createElement('section');slide.className='video-slide';
+  slide.innerHTML='<video></video><div class="video-error-panel"><strong data-feed-error-text></strong><small data-feed-error-detail></small></div>';
+  document.body.appendChild(slide);
+  const v=slide.querySelector('video');
+  v.dataset.directSrc='https://cdn.example/movie/clip.mp4?token=PRIVATE_TOKEN';
+  v.dataset.expectedSrc=v.dataset.directSrc;
+  v.dataset.currentRoute='direct';
+  Object.defineProperty(v,'error',{configurable:true,get:()=>({code:4})});
+  markFeedUnavailable(slide,v);
+  const result={display:slide.querySelector('[data-feed-error-text]').textContent,details:slide.querySelector('[data-feed-error-detail]').textContent,diagnostic:slide.dataset.failureSummary};
+  slide.remove();return result;
+});
+assert.match(videoFailureDiagnostics.display,/配信元/);
+assert.match(videoFailureDiagnostics.details,/cdn\.example/);
+assert.match(videoFailureDiagnostics.details,/mp4/);
+assert.match(videoFailureDiagnostics.details,/MediaError:4/);
+assert.equal(videoFailureDiagnostics.details.includes('PRIVATE_TOKEN'),false,'diagnostics may not expose URL query secrets');
+
 const missingSourceUI=await page.evaluate(()=>{
   const slide=document.createElement('section');slide.className='video-slide';
   slide.innerHTML='<video></video><div class="video-error-panel"><strong data-feed-error-text></strong><button data-feed-retry="0">再試行</button></div>';
