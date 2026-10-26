@@ -647,3 +647,16 @@ main,.view,.channel-list{max-width:100%;min-width:0}
 .video-missing-source p{font-size:12px;margin:8px 0}
 .video-missing-source button{position:relative;z-index:8;border:0;background:#fff;color:#213b5a;border-radius:12px;padding:10px 14px;font-weight:750}
 .video-error-panel [data-feed-source-open]{margin-left:5px}
+
+
+/* 1.8.1 — reliable iPhone media recovery, diagnostics only after errors */
+.video-error-panel [data-feed-error-detail]{
+  display:block;margin-top:9px;font-size:10px;line-height:1.45;
+  color:#c9d9eb;overflow-wrap:anywhere;text-align:left
+}
+.video-error-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin-top:10px}
+.video-error-actions button{
+  margin:0;font-size:11px;min-height:34px;max-width:100%;
+  padding:8px 10px;overflow-wrap:anywhere
+}
+.video-error-panel{max-height:60%;overflow:auto;-webkit-overflow-scrolling:touch}
