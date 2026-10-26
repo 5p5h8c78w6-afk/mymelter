@@ -326,7 +326,7 @@ const articlePages=await page.evaluate(async()=>{
   const old=fetchText;fetchText=async u=>docs[u]||'';const out=await loadReadableArticlePages({title:'記事',url:'https://article-pages.example/a',type:'article'},5);fetchText=old;
   return {pages:out.pages,text:out.blocks.filter(x=>x.text).map(x=>x.text).join(' '),next:articleContinuationUrl(docs['https://article-pages.example/a'],'https://article-pages.example/a')};
 });assert.equal(articlePages.pages,3);assert.match(articlePages.text,/1ページ目/);assert.match(articlePages.text,/2ページ目/);assert.match(articlePages.text,/3ページ目/);assert.equal(articlePages.next,'https://article-pages.example/a?page=2');
-assert.equal(await page.evaluate(()=>APP_VERSION),'1.8.0');
+assert.equal(await page.evaluate(()=>APP_VERSION),'1.8.1');
 const genericDirectRegression=await page.evaluate(()=>{
   const ch=normalizeChannel({id:'general',name:'General Site',url:'https://sample.example/',type:'mixed'});
   const clips='<html><body><main>'+
@@ -353,7 +353,7 @@ assert.deepEqual(genericDirectRegression.gallery,[{type:'image',image:'https://s
 assert.deepEqual(genericDirectRegression.og,[{type:'video',videoUrl:'https://cdn.example/featured.mp4'}]);
 assert.deepEqual(genericDirectRegression.rss,['article']);
 assert.deepEqual(genericDirectRegression.recovery,{original:true,safari:true});
-assert.match(genericDirectRegression.summary,/直接再生0・元ページ2/);
+assert.match(genericDirectRegression.summary,/再生URL検出0・URL未取得2/);
 
 const fixtureRegression=await page.evaluate((fx)=>{
   const mk=(id,name,url)=>normalizeChannel({id,name,url,type:'mixed'});
@@ -461,6 +461,62 @@ const videoFirst=await page.evaluate(()=>{
   document.querySelector('[data-video-gallery-open="1"]').click();openVideoFeedItems=oldOpen;
   return {mode:p.mode,videoFirst:screen.classList.contains('video-first'),cards:cards.length,opened,toolbar:getComputedStyle(document.querySelector('.reader-toolbar')).display,status:getComputedStyle(document.querySelector('.reader-status')).display};
 });assert.equal(videoFirst.mode,'video');assert.equal(videoFirst.videoFirst,true);assert.equal(videoFirst.cards,3);assert.deepEqual(videoFirst.opened,{count:3,title:'動画中心',start:1});assert.equal(videoFirst.toolbar,'none');assert.equal(videoFirst.status,'none');
+const iosPlaybackRegression=await page.evaluate(()=>{
+  const originalPlay=HTMLMediaElement.prototype.play,originalLoad=HTMLMediaElement.prototype.load;
+  let synchronousCalls=0;
+  HTMLMediaElement.prototype.play=function(){synchronousCalls++;return Promise.resolve()};
+  HTMLMediaElement.prototype.load=function(){};
+  let result={};
+  try{
+    const item={id:'ios-direct',url:'https://posts.example/v1',type:'video',videoUrl:'https://media.example/fixture.mp4',image:'https://media.example/poster.jpg',title:'120 second clip'};
+    openVideoFeedItems([item],'Safari launch test',0);
+    const v=document.querySelector('#videoFeed .video-slide video[data-feed-video]'),
+          slide=v?.closest('.video-slide');
+    result.sameGesturePlays=synchronousCalls;
+    result.hasSrc=!!v?.getAttribute('src');
+    result.shouldPlay=v?.dataset.shouldPlay;
+    result.webKitInline=!!v?.hasAttribute('webkit-playsinline');
+    Object.defineProperty(v,'duration',{configurable:true,get:()=>120});
+    v.dispatchEvent(new Event('loadedmetadata'));
+    result.sourceAfterLongMetadata=!!v.getAttribute('src');
+    result.hasLongMode=slide.classList.contains('system-long-video');
+    result.poster=v.getAttribute('poster');
+  }finally{
+    const dialog=document.getElementById('videoFeedDialog');
+    if(dialog?.open)dialog.close();
+    clearFeedPlaybackWatchdog();
+    HTMLMediaElement.prototype.play=originalPlay;
+    HTMLMediaElement.prototype.load=originalLoad;
+  }
+  return result;
+});
+assert.ok(iosPlaybackRegression.sameGesturePlays>=1,'play() must execute in original tap stack');
+assert.equal(iosPlaybackRegression.hasSrc,true);
+assert.equal(iosPlaybackRegression.shouldPlay,'1');
+assert.equal(iosPlaybackRegression.webKitInline,true);
+assert.equal(iosPlaybackRegression.sourceAfterLongMetadata,true,'120-second videos may not lose their src');
+assert.equal(iosPlaybackRegression.hasLongMode,false,'long media may not be replaced with a blank placeholder');
+assert.equal(iosPlaybackRegression.poster,'https://media.example/poster.jpg');
+
+const videoFailureDiagnostics=await page.evaluate(()=>{
+  const slide=document.createElement('section');slide.className='video-slide';
+  slide.innerHTML='<video></video><div class="video-error-panel"><strong data-feed-error-text></strong><small data-feed-error-detail></small></div>';
+  document.body.appendChild(slide);
+  const v=slide.querySelector('video');
+  v.dataset.directSrc='https://cdn.example/movie/clip.mp4?token=PRIVATE_TOKEN';
+  v.dataset.expectedSrc=v.dataset.directSrc;
+  v.dataset.currentRoute='direct';
+  Object.defineProperty(v,'error',{configurable:true,get:()=>({code:4})});
+  markFeedUnavailable(slide,v);
+  const result={display:slide.querySelector('[data-feed-error-text]').textContent,details:slide.querySelector('[data-feed-error-detail]').textContent,diagnostic:slide.dataset.failureSummary};
+  slide.remove();return result;
+});
+assert.match(videoFailureDiagnostics.display,/配信元/);
+assert.match(videoFailureDiagnostics.details,/cdn\.example/);
+assert.match(videoFailureDiagnostics.details,/mp4/);
+assert.match(videoFailureDiagnostics.details,/MediaError:4/);
+assert.equal(videoFailureDiagnostics.details.includes('PRIVATE_TOKEN'),false,'diagnostics may not expose URL query secrets');
+
 const missingSourceUI=await page.evaluate(()=>{
   const slide=document.createElement('section');slide.className='video-slide';
   slide.innerHTML='<video></video><div class="video-error-panel"><strong data-feed-error-text></strong><button data-feed-retry="0">再試行</button></div>';
@@ -500,5 +556,5 @@ await page.route('https://fixture.example/**',route=>route.fulfill({status:200,c
 await page.evaluate(()=>{fetchText=async()=> '#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:3,\npart.ts\n#EXT-X-ENDLIST';return openQualityPicker({title:'fixture',videoUrl:'https://fixture.example/video.m3u8'},null,true);});
 const downloadEvent=page.waitForEvent('download');await page.locator('[data-quality-start]').click();const download=await downloadEvent;assert.equal(download.suggestedFilename(),'fixture.zip');const zip=fs.readFileSync(await download.path());assert.equal(zip.readUInt32LE(0),0x04034b50);assert.ok(zip.includes(Buffer.from('playlist.m3u8')));assert.ok(zip.includes(Buffer.from('media-00000.ts')));assert.ok(zip.includes(Buffer.from([0x47,0x01,0x02])));
 await page.evaluate(()=>{navigate('channels');state.ui.channelGenre='all';renderChannelManager();});await page.screenshot({path:__dirname+'/../channels-mobile.png',fullPage:true});
-assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.8.0 direct thumbnail video feed, 120 imported candidates across four pages, 40 detail URLs, MP4-priority/HLS alternative, source-unavailable fallback, cross-site article/image, and older regressions; no page errors');
+assert.deepEqual(errors,[]);console.log('PASS browser: MyMelter 1.8.1 direct thumbnail video feed, 120 imported candidates across four pages, 40 detail URLs, MP4-priority/HLS alternative, source-unavailable fallback, cross-site article/image, and older regressions; no page errors');
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
