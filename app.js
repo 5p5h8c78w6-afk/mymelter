@@ -1401,7 +1401,7 @@ function videoAvailabilityLabel(items=[]){
   const videos=items.filter(x=>mediaKind(x)==='video');
   if(!videos.length)return '';
   const playable=videos.filter(x=>!!x.videoUrl).length;
-  return ' · 動画'+videos.length+'件（直接再生'+playable+'・元ページ'+(videos.length-playable)+'）';
+  return ' · 動画'+videos.length+'件（再生URL検出'+playable+'・URL未取得'+(videos.length-playable)+'／実再生は別途確認）';
 }
 function activeVideoItems(){
   const primary=(activeItems||[]).filter(x=>mediaKind(x)==='video'&&x?.videoUrl);
