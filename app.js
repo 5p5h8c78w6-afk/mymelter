@@ -2159,6 +2159,20 @@ function feedUnavailableMessage(v,kind='missing'){
   if(kind==='timeout')return '動画の読み込みが進みません。配信元の通信制限などが考えられます。';
   return '動画の再生に失敗しました。配信元の状態を確認してください。';
 }
+function videoFailureInfo(v,kind=''){
+  const source=v?.dataset?.expectedSrc||v?.dataset?.directSrc||'';
+  let host='不明',format='不明';
+  try{
+    const u=new URL(source);host=u.hostname||'不明';
+    format=(u.pathname.match(/\.(mp4|m4v|mov|webm|m3u8)$/i)||[])[1]?.toLowerCase()||'不明';
+  }catch{}
+  const code=Math.max(0,Math.min(4,Number(v?.error?.code)||0));
+  const route=String(v?.dataset?.currentRoute||'unknown').replace(/[^a-z-]/ig,'').slice(0,20)||'unknown';
+  return {host,format,route,code,ready:Math.max(0,Math.min(4,Number(v?.readyState)||0)),network:Math.max(0,Math.min(3,Number(v?.networkState)||0)),kind};
+}
+function videoFailureSummary(info){
+  return '配信元:'+info.host+' · 形式:'+info.format+' · 経路:'+info.route+' · MediaError:'+info.code+' · ready:'+info.ready+' · network:'+info.network;
+}
 function markFeedUnavailable(slide,v,message=''){
   if(!slide)return;
   if(v){
@@ -2172,6 +2186,10 @@ function markFeedUnavailable(slide,v,message=''){
   slide.classList.add('video-load-error','video-source-missing');
   const label=slide.querySelector('[data-feed-error-text]');
   if(label)label.textContent=message||feedUnavailableMessage(v);
+  const data=videoFailureSummary(videoFailureInfo(v,'playback'));
+  const detail=slide.querySelector('[data-feed-error-detail]');
+  if(detail)detail.textContent=data;
+  slide.dataset.failureSummary=data;
   showFeedControls(false);
 }
 
@@ -2406,7 +2424,7 @@ function currentFeedIndexFromScroll(){
   slides.forEach((slide,i)=>{const d=Math.abs(slide.offsetTop-top);if(d<bestDist){bestDist=d;best=i;}});
   return best;
 }
-function activateFeedIndex(index,force=false){
+function activateFeedIndex(index,force=false,userInitiated=false){
   const slides=$$('.video-slide',$('#videoFeed')); if(!slides.length)return;
   const i=Math.max(0,Math.min(slides.length-1,Number(index)||0));
   if(!force&&i===feedCurrentIndex){
@@ -2438,6 +2456,21 @@ function activateFeedIndex(index,force=false){
       kickFeedPlayback(v,slide,'再生を開始中…');
     };
     if(v.readyState>=2)start();else v.addEventListener('canplay',start,{once:true});
+    // Call play while the user's tap activation is still present on iPhone.
+    if(userInitiated){
+      try{
+        const pending=v.play();
+        if(pending?.catch)pending.catch(()=>{
+          if(v.dataset.feedState==='active'&&feedCurrentIndex===i&&!slide.classList.contains('video-load-error')){
+            slide.classList.add('video-needs-tap');
+            setLoadStatus(slide,'動画をタップすると再生を再試行できます');
+          }
+        });
+      }catch{
+        slide.classList.add('video-needs-tap');
+        setLoadStatus(slide,'動画をタップすると再生を再試行できます');
+      }
+    }
   }
 }
 function snapFeedToIndex(i){
@@ -2452,18 +2485,21 @@ function openVideoFeedItems(items,title='動画',startIndex=0){
   $('#videoFeed').innerHTML=vids.map((x,i)=>videoSlideHTML(x,i)).join('');
   if(!$('#videoFeedDialog').open)$('#videoFeedDialog').showModal();
   showFeedControls(false);
-  setupVideoAutoplay(feedCurrentIndex);updateFeedSoundUI();startFeedPlaybackWatchdog();
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{snapFeedToIndex(feedCurrentIndex);activateFeedIndex(feedCurrentIndex,true);}));
+  setupVideoAutoplay(feedCurrentIndex);updateFeedSoundUI();
+  // Immediate activation preserves iOS Safari user interaction.
+  activateFeedIndex(feedCurrentIndex,true,true);
+  startFeedPlaybackWatchdog();
+  requestAnimationFrame(()=>{snapFeedToIndex(feedCurrentIndex);});
 }
 function openVideoFeed(){openVideoFeedItems(activeVideoItems(),activeChannel?.name||'動画',0);}
 function videoSlideHTML(x,i){
   const direct=x.videoUrl||'',proxy=mediaProxyUrl(direct),poster=x.image||'',saved=isSavedUrl(x.url);
   const proxyAttr=proxy&&proxy!==direct?' data-proxy-src="'+esc(proxy)+'"':'';
   const altAttr=x.alternateVideoUrl&&x.alternateVideoUrl!==direct?' data-alternate-src="'+esc(x.alternateVideoUrl)+'"':'';
-  const media=direct?'<video data-direct-src="'+esc(direct)+'"'+proxyAttr+altAttr+(poster?' poster="'+esc(poster)+'"':'')+' data-feed-video="'+i+'" playsinline loop preload="none"></video>':'<div class="video-fallback">'+(poster?'<img '+imageSourceAttrs(poster)+' alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">':'')+'<div class="video-missing-source"><strong>この動画の直接再生URLは未取得です</strong><p>Safariで動画がある元ページを確認してください。</p>'+(x.url?'<button type="button" data-feed-source-open="'+i+'">元ページで再生する</button>':'')+'</div></div>';
+  const media=direct?'<video data-direct-src="'+esc(direct)+'"'+proxyAttr+altAttr+(poster?' poster="'+esc(poster)+'"':'')+' data-feed-video="'+i+'" playsinline webkit-playsinline loop preload="none"></video>':'<div class="video-fallback">'+(poster?'<img '+imageSourceAttrs(poster)+' alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">':'')+'<div class="video-missing-source"><strong>この動画の直接再生URLは未取得です</strong><p>Safariで動画がある元ページを確認してください。</p>'+(x.url?'<button type="button" data-feed-source-open="'+i+'">元ページで再生する</button>':'')+'</div></div>';
   const source=x.deepDive?('深掘り · '+(x.deepSource||'関連')):(x.channelName||domainOf(x.url));
   const longCard='<div class="long-system-card">'+(poster?'<img '+imageSourceAttrs(poster)+' alt="">':'<div class="long-system-placeholder">長尺動画</div>')+'<div class="long-system-copy"><strong>長尺動画</strong><small>iPhoneのSafari標準プレイヤーで再生します</small><button type="button" data-long-system-play="'+i+'">Safariで再生</button></div></div>';
-  return '<section class="video-slide" data-feed-index="'+i+'">'+media+longCard+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong data-feed-error-text>動画を再生できません。配信元の状態を確認してください。</strong><button type="button" data-feed-retry="'+i+'">再試行</button>'+(x.url?'<button type="button" data-feed-source-open="'+i+'">元ページで再生する</button>':'')+'</div><div class="video-load-status" data-feed-load-status hidden></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><video class="seek-preview-video" muted playsinline preload="metadata"></video><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><div class="video-scrubber" data-feed-scrub="'+i+'" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="video-scrub-track"><div class="video-scrub-buffer"></div><div class="video-scrub-fill"></div><div class="video-scrub-thumb"></div></div></div><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-quality="'+i+'"><span class="circle">HD</span><span>画質</span></button><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>端末保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
+  return '<section class="video-slide" data-feed-index="'+i+'">'+media+longCard+'<button type="button" class="video-play-zone" data-feed-toggle="'+i+'" aria-label="再生・一時停止"></button><div class="video-error-panel"><strong data-feed-error-text>動画を再生できません。配信元の状態を確認してください。</strong><small data-feed-error-detail></small><div class="video-error-actions"><button type="button" data-feed-retry="'+i+'">再試行</button>'+(direct?'<button type="button" data-feed-media-open="'+i+'">Safariで動画URLを開く</button>':'')+(x.url?'<button type="button" data-feed-source-open="'+i+'">元ページで確認</button>':'')+'<button type="button" data-feed-copy-error="'+i+'">診断をコピー</button></div></div><div class="video-load-status" data-feed-load-status hidden></div><div class="video-progress"><div class="seek-preview" data-feed-preview="'+i+'"><video class="seek-preview-video" muted playsinline preload="metadata"></video><img '+(poster?imageSourceAttrs(poster):'')+' alt=""><span data-feed-preview-time>0:00</span></div><div class="video-scrubber" data-feed-scrub="'+i+'" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="video-scrub-track"><div class="video-scrub-buffer"></div><div class="video-scrub-fill"></div><div class="video-scrub-thumb"></div></div></div><div class="video-time"><span data-feed-current>0:00</span><span>/</span><span data-feed-duration>--:--</span></div></div><div class="video-overlay"><strong>'+esc(x.title||'動画')+'</strong><small>'+esc(source)+'</small></div><div class="video-actions"><button type="button" class="video-action" data-feed-quality="'+i+'"><span class="circle">HD</span><span>画質</span></button><button type="button" class="video-action" data-feed-sound="'+i+'"><span class="circle">🔇</span><span class="video-action-label">音声ON</span></button><button type="button" class="video-action" data-feed-quick-save="'+i+'"><span class="circle">⇩</span><span>端末保存</span></button><button type="button" class="video-action" data-feed-save="'+i+'"><span class="circle">'+(saved?'♥':'♡')+'</span><span>'+(saved?'保存済み':'保存')+'</span></button>'+(x.url&&x.url!==x.videoUrl?'<button type="button" class="video-action" data-feed-source-open="'+i+'"><span class="circle">↗</span><span>元ページ</span></button>':'')+'</div><div class="swipe-hint">⌃ 上にスワイプして次の動画</div></section>';
 }
 function setupVideoAutoplay(startIndex=0){
   const feed=$('#videoFeed'),vids=activeFeedItems,slides=$$('.video-slide',feed);
@@ -2475,7 +2511,8 @@ function setupVideoAutoplay(startIndex=0){
       if(v.dataset.feedState==='released')return;
       try{v.currentTime=0;}catch{}
       tick();updateBufferedVisual(slide,v);
-      if(Number.isFinite(v.duration)&&v.duration>45)enableNativeLongVideo(slide,v);
+      // Keep playable source attached for all durations (including long videos).
+      if(Number.isFinite(v.duration))v.dataset.mediaDuration=String(v.duration);
     });
     v.addEventListener('canplay',()=>{
       if(v.dataset.feedState==='released')return;
@@ -2674,6 +2711,8 @@ document.addEventListener('click',async e=>{
     return;
   }
   const feedRetry=e.target.closest('[data-feed-retry]'); if(feedRetry){const i=Number(feedRetry.dataset.feedRetry),slide=feedRetry.closest('.video-slide'),v=slide?.querySelector('video');if(v){feedRoutePrefs.delete(v.dataset.directSrc||'');delete v.dataset.proxyTried;delete v.dataset.alternateTried;delete v.dataset.noDataProxyTried;releaseFeedVideoElement(v);slide?.classList.remove('video-load-error','video-source-missing');const label=slide?.querySelector('[data-feed-error-text]');if(label)label.textContent='元データがありません（削除・期限切れの可能性があります）';activateFeedIndex(i,true);}return;}
+  const feedMedia=e.target.closest('[data-feed-media-open]');if(feedMedia){const i=Number(feedMedia.dataset.feedMediaOpen),item=activeFeedItems[i],v=feedSlide(i)?.querySelector('video');const url=normalizeUrl(v?.dataset.expectedSrc||item?.videoUrl||'');if(url)window.open(url,'_blank','noopener');return;}
+  const feedCopy=e.target.closest('[data-feed-copy-error]');if(feedCopy){const i=Number(feedCopy.dataset.feedCopyError),slide=feedSlide(i),v=slide?.querySelector('video');const detail=slide?.dataset.failureSummary||videoFailureSummary(videoFailureInfo(v,'unknown'));const message='MyMelter '+APP_VERSION+' / '+detail;try{await navigator.clipboard.writeText(message);toast('診断をコピーしました');}catch{toast(message)}return;}
   const feedSource=e.target.closest('[data-feed-source-open]'); if(feedSource){const item=activeFeedItems[Number(feedSource.dataset.feedSourceOpen)];if(item?.url)window.open(item.url,'_blank','noopener');return;}
   const lib=e.target.closest('[data-open-library]'); if(lib){const [kind,idxStr]=lib.dataset.openLibrary.split(':');const arr=kind==='saved'?state.saved:state.history;openItem(arr[Number(idxStr)]);return;}
   const rem=e.target.closest('[data-remove-saved]'); if(rem){removeSavedAt(Number(rem.dataset.removeSaved));return;}
