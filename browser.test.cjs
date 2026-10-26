@@ -353,7 +353,7 @@ assert.deepEqual(genericDirectRegression.gallery,[{type:'image',image:'https://s
 assert.deepEqual(genericDirectRegression.og,[{type:'video',videoUrl:'https://cdn.example/featured.mp4'}]);
 assert.deepEqual(genericDirectRegression.rss,['article']);
 assert.deepEqual(genericDirectRegression.recovery,{original:true,safari:true});
-assert.match(genericDirectRegression.summary,/直接再生0・元ページ2/);
+assert.match(genericDirectRegression.summary,/再生URL検出0・URL未取得2/);
 
 const fixtureRegression=await page.evaluate((fx)=>{
   const mk=(id,name,url)=>normalizeChannel({id,name,url,type:'mixed'});
