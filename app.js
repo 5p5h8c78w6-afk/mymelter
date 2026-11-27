@@ -1,5 +1,5 @@
 const APP_VERSION = '1.8.1';
-const APP_BUILD = '1.8.1-save2x';
+const APP_BUILD = '1.8.1-discover1';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -251,8 +251,8 @@ function renderCandidates(){
   root.innerHTML=state.candidates.slice(0,12).map(c=>`
     <article class="candidate-card">
       <div class="candidate-top"><span class="mini-icon">${esc(typeGlyph(c.type))}</span><span><strong>${esc(c.name)}</strong><small>${esc(typeLabel(c.type))} · ${esc(domainOf(c.url))}</small></span></div>
-      <div class="candidate-actions"><button class="mini-primary" data-add-candidate="${esc(c.id)}">＋ 追加</button><button class="mini-secondary" data-preview-candidate="${esc(c.id)}">確認</button></div>
-    </article>`).join('')+`<article class="candidate-card"><div class="candidate-top"><span class="mini-icon">＋</span><span><strong>候補をまとめて追加</strong><small>未登録URLだけ追加します</small></span></div><div class="candidate-actions"><button class="mini-primary" data-add-all-candidates>まとめて追加</button></div></article>`;
+      <div class="candidate-actions"><button type="button" class="mini-primary" data-add-candidate="${esc(c.id)}">＋ 追加</button><button type="button" class="mini-secondary" data-preview-candidate="${esc(c.id)}">確認</button></div>
+    </article>`).join('')+`<article class="candidate-card"><div class="candidate-top"><span class="mini-icon">＋</span><span><strong>候補をまとめて追加</strong><small>未登録URLだけ追加します</small></span></div><div class="candidate-actions"><button type="button" class="mini-primary" data-add-all-candidates>まとめて追加</button></div></article>`;
 }
 function thumbHTML(item, cls='media-thumb'){
   if(item.image) return `<div class="${cls}"><img ${imageSourceAttrs(item.image)} alt="" loading="lazy" referrerpolicy="no-referrer"><span class="media-badge">${esc(typeLabel(mediaKind(item)))}</span></div>`;
@@ -395,8 +395,8 @@ function saveChannelFromForm(){
   state.candidates=state.candidates.filter(x=>x.url!==c.url); saveState(); $('#channelDialog').close(); toast('チャンネルを保存しました'); return true;
 }
 
-async function fetchDirect(url){
-  const r=await fetch(url,{method:'GET',mode:'cors',credentials:'omit',redirect:'follow',headers:{'Accept':'text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.5'}});
+async function fetchDirect(url,signal){
+  const r=await fetch(url,{method:'GET',mode:'cors',signal,credentials:'omit',redirect:'follow',headers:{'Accept':'text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.5'}});
   if(!r.ok) throw new Error(`HTTP ${r.status}`); return await r.text();
 }
 const SITE_ADAPTERS=[
@@ -421,10 +421,10 @@ function workerErrorMessage(status,errorCode,upstreamStatus,finalUrl){
   }
   return `Worker HTTP ${status}`;
 }
-async function fetchProxyOnce(url){
+async function fetchProxyOnce(url,signal){
   const base=state.settings.proxyUrl.trim().replace(/\/+$/,''); if(!base) throw new Error('Worker URLが未設定です');
   const u=new URL(base); u.searchParams.set('url',url); if(state.settings.proxyKey) u.searchParams.set('key',state.settings.proxyKey);
-  const r=await fetch(u.href,{credentials:'omit'});
+  const r=await fetch(u.href,{credentials:'omit',signal});
   if(!r.ok){
     const errorCode=r.headers.get('X-MyMelter-Error')||'';
     const upstreamStatus=r.headers.get('X-MyMelter-Upstream-Status')||'';
@@ -454,14 +454,14 @@ async function testWorkerConnection(){
   }
 }
 
-async function fetchProxy(url){
-  try{return await fetchProxyOnce(url);}
+async function fetchProxy(url,signal){
+  try{return await fetchProxyOnce(url,signal);}
   catch(err){
     const alt=alternatePublicUrl(url);
     const isUpstream403=Number(err.upstreamStatus||err.status)===403&&(err.errorCode==='upstream-http'||!err.errorCode);
     if(alt&&isUpstream403){
       try{
-        const text=await fetchProxyOnce(alt);
+        const text=await fetchProxyOnce(alt,signal);
         toast('元URLが403のため、公開ランキング実ページへ切り替えました');
         return text;
       }catch(altErr){
@@ -472,13 +472,14 @@ async function fetchProxy(url){
     throw err;
   }
 }
-async function fetchText(url){
+async function fetchText(url,signal){
   const mode=state.settings.fetchMode||'auto';
-  if(mode==='direct') return fetchDirect(url);
-  if(mode==='proxy') return fetchProxy(url);
-  try{return await fetchDirect(url);}catch(directErr){
+  if(mode==='direct') return fetchDirect(url,signal);
+  if(mode==='proxy') return fetchProxy(url,signal);
+  try{return await fetchDirect(url,signal);}catch(directErr){
+    if(signal?.aborted)throw directErr;
     if(!state.settings.proxyUrl) throw new Error(`直接取得失敗: ${directErr.message}。設定で無料Workerを登録すると対応範囲が広がります。`);
-    try{return await fetchProxy(url);}catch(proxyErr){throw new Error(`直接取得: ${directErr.message} / Worker: ${proxyErr.message}`);}
+    try{return await fetchProxy(url,signal);}catch(proxyErr){throw new Error(`直接取得: ${directErr.message} / Worker: ${proxyErr.message}`);}
   }
 }
 
@@ -1283,9 +1284,13 @@ function consumeBrowserImportHash(hash=location.hash){
   }catch(e){ toast('Safari取込に失敗: '+e.message); return null; }
 }
 
-async function discoverChannels(url,similarTo=null){
+async function fetchDiscoveryText(url,timeout=8000){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
+  try{return await fetchText(url,controller.signal);}finally{clearTimeout(timer);}
+}
+async function discoverChannels(url,similarTo=null,probe=true){
   const base=normalizeUrl(url); if(!base) throw new Error('URLが正しくありません');
-  const status=[]; const text=await fetchText(base); const candidates=[]; const xml=parseMaybeXml(text);
+  const text=await fetchDiscoveryText(base); const candidates=[]; const xml=parseMaybeXml(text);
   if(xml?.querySelector('rss, feed')){
     candidates.push(candidateFrom(base, nodeText(xml,['channel > title','feed > title'])||`${domainOf(base)} RSS`,'feed',{source:'feed'}));
     return candidates;
@@ -1312,17 +1317,20 @@ async function discoverChannels(url,similarTo=null){
     candidates.push(candidateFrom(u.href,label,guessTypeFromText(signal,u.href),{source:'navigation'}));
   }
 
-  const probeUrls=['/feed','/feed.xml','/rss','/rss.xml','/atom.xml'].map(p=>new URL(p,baseOrigin).href);
-  for(const p of probeUrls){
-    if(candidates.some(c=>c.url===p)) continue;
-    try{ const t=await Promise.race([fetchText(p),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),3500))]); const x=parseMaybeXml(t); if(x?.querySelector('rss, feed')){ candidates.push(candidateFrom(p,`${siteTitle} RSS`,'feed',{source:'probe'})); status.push('RSS'); break; } }catch{}
+  if(probe){
+    const paths=feedLinks.length?['/sitemap.xml']:['/feed','/feed.xml','/rss','/rss.xml','/atom.xml','/sitemap.xml'];
+    const found=await Promise.all(paths.map(async path=>{
+      const target=new URL(path,baseOrigin).href;
+      if(candidates.some(c=>c.url===target))return null;
+      try{
+        const xml=parseMaybeXml(await fetchDiscoveryText(target,2500));
+        if(xml?.querySelector('rss,feed'))return candidateFrom(target,siteTitle+' RSS','feed',{source:'probe'});
+        if(xml?.querySelector('urlset,sitemapindex'))return candidateFrom(target,siteTitle+' サイト更新一覧','feed',{source:'sitemap'});
+      }catch{}
+      return null;
+    }));
+    candidates.push(...found.filter(Boolean));
   }
-
-  try{
-    const sm=new URL('/sitemap.xml',baseOrigin).href; const t=await Promise.race([fetchText(sm),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),3500))]); const sx=parseMaybeXml(t);
-    if(sx?.querySelector('urlset, sitemapindex')) candidates.push(candidateFrom(sm,`${siteTitle} サイト更新一覧`,'feed',{source:'sitemap'}));
-  }catch{}
-
   return uniqueBy(candidates.filter(c=>c.url),c=>c.url).slice(0,30);
 }
 
@@ -1336,23 +1344,46 @@ function candidateThumbHTML(c){
 }
 function renderDiscoveryResults(list){
   const root=$('#discoverResults');
-  if(!list.length){root.innerHTML=`<div class="empty-card">信頼できる似たサイト候補を見つけられませんでした。広告やPRは候補から除外しています。</div>`;return;}
-  root.innerHTML=`<div class="discover-results-head"><button class="mini-primary" data-add-all-candidates>まとめて追加</button></div>`+list.map(c=>`<article class="discover-result">${candidateThumbHTML(c)}<div class="result-copy"><strong>${esc(c.name)}</strong><small>${esc(typeLabel(c.type))} · ${esc(c.url)}</small></div><div class="result-actions"><button class="mini-secondary" data-preview-candidate="${esc(c.id)}">確認</button><button class="mini-primary" data-add-candidate="${esc(c.id)}">＋ 追加</button></div></article>`).join('');
+  if(!list.length){root.innerHTML=`<div class="empty-card">追加できる候補はありません。</div>`;return;}
+  root.innerHTML=`<div class="discover-results-head"><button type="button" class="mini-primary" data-add-all-candidates>まとめて追加</button></div>`+list.map(c=>`<article class="discover-result">${candidateThumbHTML(c)}<div class="result-copy"><strong>${esc(c.name)}</strong><small>${esc(typeLabel(c.type))} · ${esc(c.url)}</small></div><div class="result-actions"><button type="button" class="mini-secondary" data-preview-candidate="${esc(c.id)}">確認</button><button type="button" class="mini-primary" data-add-candidate="${esc(c.id)}">＋ 追加</button></div></article>`).join('');
+}
+let discoveryRequest=0;
+const discoveryFeeds=['https://www3.nhk.or.jp/rss/news/cat0.xml','https://www.nasa.gov/feed/'];
+async function findChannelSuggestions(){
+  const channels=state.channels.slice(),existing=new Set(channels.map(c=>normalizeUrl(c.url)));
+  const related=channels.flatMap(channel=>(channel.relatedSitesVersion>=14&&Array.isArray(channel.relatedSites)?channel.relatedSites:[])
+    .filter(c=>isSuitableSimilarCandidate(c,null)&&!channels.some(ch=>domainOf(ch.url)===domainOf(c.url)))
+    .map(c=>candidateFrom(c.url,c.name,c.type,{...c,source:'safari-related'})));
+  const sites=channels.filter(c=>c.source!=='browser'&&c.type!=='feed').slice(0,3).map(c=>c.url);
+  const urls=[...new Set([...sites,...discoveryFeeds.filter(url=>!existing.has(url))])];
+  const results=await Promise.allSettled(urls.map(url=>discoverChannels(url,null,false)));
+  const successful=results.filter(result=>result.status==='fulfilled');
+  const list=uniqueBy([...related,...successful.flatMap(result=>result.value)].filter(c=>c.url&&!existing.has(c.url)),c=>c.url);
+  return {list,failed:results.length-successful.length};
 }
 async function runDiscovery(){
-  const url=$('#discoverUrl').value.trim(); if(!normalizeUrl(url)){toast('URLを確認してください');return;}
-  $('#discoverStatus').textContent='サイトを解析しています…'; $('#discoverResults').innerHTML=''; $('#runDiscoveryBtn').disabled=true;
+  const input=$('#discoverUrl'),raw=input.value.trim();
+  const url=normalizeUrl(raw)||(/^[\w-]+(?:\.[\w-]+)+[/:?#]?[^\s]*$/i.test(raw)?normalizeUrl('https://'+raw):'');
+  const request=++discoveryRequest,status=$('#discoverStatus'),button=$('#runDiscoveryBtn'),results=$('#discoverResults');
+  results.replaceChildren();
+  if(raw&&!url){button.disabled=false;status.textContent='サイトのURLを確認してください。';input.focus();return;}
+  if(url)input.value=url;
+  status.textContent=url?'サイトを解析しています…':'登録サイトの関連候補と公開フィードを探しています…';button.disabled=true;
   try{
-    const list=await discoverChannels(url); state.candidates=list; state.meta.lastDiscoveryUrl=url; state.meta.lastDiscoveryAt=Date.now(); saveState(false); renderCandidates(); renderDiscoveryResults(list);
-    $('#discoverStatus').textContent=`${list.length}件の候補を検出しました。`;
+    const {list,failed}=url?{list:await discoverChannels(url),failed:0}:await findChannelSuggestions();
+    if(request!==discoveryRequest)return;
+    state.candidates=list;if(url)state.meta.lastDiscoveryUrl=url;state.meta.lastDiscoveryAt=Date.now();saveState(false);renderCandidates();renderDiscoveryResults(list);
+    status.textContent=list.length?list.length+'件の候補が見つかりました。':failed?'候補の取得に失敗した取得先があります。再検索するかURLを指定してください。':'新しく追加できる候補はありません。別のサイトのURLでも探せます。';
   }catch(e){
-    $('#discoverStatus').textContent=`解析できませんでした：${e.message}`;
-    const browserEligible=/HTTP 403|Worker経由|取得先サイト/.test(String(e.message||''));
-    if(browserEligible){
-      $('#discoverResults').innerHTML=`<div class="browser-fallback-card"><strong>Safari取り込みに切り替えられます</strong><small>このサイトはWorker経由を拒否しています。Safariで表示した実ページからMyMelterへ一覧を戻します。</small><button type="button" class="primary" data-browser-import-target="${esc(alternatePublicUrl(url)||url)}">Safari取り込みを使う</button></div>`;
-    }else renderDiscoveryResults([]);
-  }
-  finally{$('#runDiscoveryBtn').disabled=false;}
+    if(request!==discoveryRequest)return;
+    status.textContent='このサイトをアプリから解析できませんでした。';
+    if(url){
+      const existing=state.channels.find(c=>canonicalBrowserSourceUrl(c.browserSourceUrl||c.url)===canonicalBrowserSourceUrl(url));
+      results.innerHTML='<div class="browser-fallback-card"><strong>Safariで開いたページから取り込めます</strong><small>Safariで対象サイトを開き、MyMelterの取り込みを使ってください。</small>'+
+        (existing?'<button type="button" class="secondary" data-open-channel="'+esc(existing.id)+'">登録済みチャンネルを開く</button>':'')+
+        '<button type="button" class="primary" data-browser-import-target="'+esc(alternatePublicUrl(url)||url)+'">Safari取り込みを使う</button></div>';
+    }
+  }finally{if(request===discoveryRequest)button.disabled=false;}
 }
 function addCandidate(id){
   const c=state.candidates.find(x=>x.id===id); if(!c)return;
@@ -2694,8 +2725,10 @@ async function importState(file){
 
 // Navigation and primary actions
 $$('[data-nav]').forEach(b=>b.addEventListener('click',()=>navigate(b.dataset.nav)));
-$('#homeAddChannel').onclick=()=>{ $('#discoverUrl').value=''; $('#discoverStatus').textContent=''; renderDiscoveryResults(state.candidates); $('#discoverDialog').showModal(); };
-$('#discoverBtn').onclick=$('#discoverBanner').onclick=$('#homeAddChannel').onclick;
+$('#homeAddChannel').onclick=()=>{ ++discoveryRequest;$('#runDiscoveryBtn').disabled=false;$('#discoverUrl').value='';$('#discoverStatus').textContent='';$('#discoverResults').replaceChildren();$('#discoverDialog').showModal(); };
+$('#discoverBanner').onclick=$('#homeAddChannel').onclick;
+$('#discoverBtn').onclick=()=>{$('#homeAddChannel').onclick();runDiscovery();};
+$('#discoverDialog').addEventListener('close',()=>{if(!$('#discoverDialog').open){++discoveryRequest;$('#runDiscoveryBtn').disabled=false;}});
 $('#channelsAddBtn').onclick=()=>openChannelEditor();
 $('#runDiscoveryBtn').onclick=runDiscovery;
 $('#discoverUrl').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();runDiscovery();}});
@@ -3092,6 +3125,7 @@ function startWebSimilarSearch(channel){
   const win=window.open(url,'_blank','noopener');if(!win)window.location.href=url;
 }
 async function runSimilarDiscovery(channel){
+  const request=++discoveryRequest;
   const status=$('#discoverStatus');$('#discoverUrl').value=channel.url;$('#discoverResults').innerHTML='';status.textContent='関連リンクから似たサイト候補を探しています…';
   if(!$('#discoverDialog').open)$('#discoverDialog').showModal();$('#runDiscoveryBtn').disabled=true;
   if(channel.source==='browser'){
@@ -3107,6 +3141,7 @@ async function runSimilarDiscovery(channel){
       const type=x.type||guessTypeFromText(name,url),candidate={...candidateFrom(url,name,type,{source:'safari-related',image:x.image,similarityScore:x.similarityScore}),genre:x.genre||inferGenre({name,url,type}),similarityScore:Number(x.similarityScore||0)};
       return isSuitableSimilarCandidate(candidate,null)?candidate:null;
     }).filter(Boolean),c=>domainOf(c.url)).slice(0,12);
+    if(request!==discoveryRequest)return;
     state.candidates=list;state.meta.lastDiscoveryUrl=channel.url;state.meta.lastDiscoveryAt=Date.now();saveState(false);renderCandidates();renderDiscoveryResults(list);
     if(list.length)status.textContent=`${list.length}件の候補。広告・PRを除外し、Safari取り込み時の情報だけで表示しています。`;
     else{status.textContent='ページ内に信頼できる関連候補がありません。';renderWebSimilarFallback(channel);}
@@ -3114,12 +3149,14 @@ async function runSimilarDiscovery(channel){
   }
   try{
     const list=(await discoverChannels(channel.url,channel)).filter(c=>!state.channels.some(x=>normalizeUrl(x.url)===normalizeUrl(c.url)));
+    if(request!==discoveryRequest)return;
     state.candidates=list;state.meta.lastDiscoveryUrl=channel.url;state.meta.lastDiscoveryAt=Date.now();saveState(false);renderCandidates();renderDiscoveryResults(list);
     if(list.length)status.textContent=`${list.length}件の候補。広告・PRを除外し、関連性の高い候補だけ表示しています。`;
     else{status.textContent='ページ内に信頼できる関連候補がありません。';renderWebSimilarFallback(channel);}
   }catch(e){
+    if(request!==discoveryRequest)return;
     status.textContent='ページから関連候補を取得できませんでした。';renderWebSimilarFallback(channel,'元ページを直接解析できないため、Web検索から候補を探します。');
-  }finally{$('#runDiscoveryBtn').disabled=false;}
+  }finally{if(request===discoveryRequest)$('#runDiscoveryBtn').disabled=false;}
 }
 function isHls(url){return /\.m3u8(?:$|[?#])/i.test(url||'');}
 async function videoQualityInfo(item){

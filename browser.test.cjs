@@ -10,6 +10,29 @@ const FIXTURES={
 (async()=>{const server=http.createServer((req,res)=>{let path=new URL(req.url,'http://localhost').pathname;if(path==='/')path='/index.html';try{const b=fs.readFileSync(__dirname+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.json')?'application/json':path.endsWith('.png')?'image/png':'text/html');res.end(b);}catch{res.statusCode=404;res.end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 try{browser=await chromium.launch({headless:true,...(process.env.MYMELTER_BROWSER_CHANNEL?{channel:process.env.MYMELTER_BROWSER_CHANNEL}:{})});const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
 await require('./saved-media.browser.cjs')(browser,'http://127.0.0.1:'+server.address().port+'/');
+const discoveryPage=await browser.newPage({serviceWorkers:'block'});
+try{
+  const feeds=['https://www3.nhk.or.jp/rss/news/cat0.xml','https://www.nasa.gov/feed/'];
+  const xml='<rss version="2.0"><channel><title>Discovery feed</title><item><title>Discovery article</title><link>https://news.example/item</link></item></channel></rss>';
+  for(const url of feeds)await discoveryPage.route(url,route=>route.fulfill({contentType:'application/rss+xml',headers:{'Access-Control-Allow-Origin':'*'},body:xml}));
+  await discoveryPage.goto('http://127.0.0.1:'+server.address().port+'/');
+  const results=discoveryPage.locator('#discoverResults');
+  await discoveryPage.locator('#discoverBtn').click();
+  await results.locator('[data-add-candidate]').first().waitFor();
+  assert.equal(await results.locator('[data-add-candidate]').count(),2);
+  await results.locator('[data-add-candidate]').first().click();
+  assert.equal(await discoveryPage.locator('#discoverDialog').isVisible(),true);
+  await discoveryPage.locator('#runDiscoveryBtn').click();
+  await discoveryPage.waitForFunction(()=>!document.querySelector('#runDiscoveryBtn').disabled);
+  assert.equal(await results.locator('[data-add-candidate]').count(),1);
+  await discoveryPage.route('https://denied.example/**',route=>route.abort());
+  await discoveryPage.locator('#discoverUrl').fill('denied.example');
+  await discoveryPage.locator('#discoverUrl').press('Enter');
+  await results.locator('[data-browser-import-target="https://denied.example/"]').click();
+  assert.equal(await discoveryPage.locator('#browserImportDialog').isVisible(),true);
+  await discoveryPage.reload();
+  assert.equal(await discoveryPage.locator('[data-open-channel]:visible').count(),1);
+}finally{await discoveryPage.close();}
 await page.addInitScript(()=>localStorage.setItem('mymelter-state-v2',JSON.stringify({channels:[{id:'a',name:'動画サイト',type:'video',url:'https://video.example/',createdAt:123,custom:'keep'},{id:'b',name:'技術ブログ',type:'article',url:'https://tech.example/',genre:'ブログ'}],saved:[{url:'https://saved.example/',title:'保存'}],settings:{proxyUrl:'',proxyKey:'keep-key'}})));
 await page.goto('http://127.0.0.1:'+server.address().port);await page.evaluate(()=>navigate('channels'));
 const emptyChannelKind=await page.evaluate(()=>({

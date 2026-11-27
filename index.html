@@ -252,10 +252,10 @@
     <form method="dialog" class="sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><div><p class="eyebrow">AUTO DISCOVERY</p><h2>チャンネルを自動で探す</h2></div><button class="round-btn" value="cancel">×</button></div>
-      <p class="sheet-lead">サイトのURLを1つ貼ると、RSS/Atom・カテゴリ・タグ・メディア一覧候補を探します。</p>
+      <p class="sheet-lead">URLを空欄にすると、登録サイトの関連候補と公開フィードを探します。URLを入れると、そのサイトのRSSやカテゴリを探します。</p>
       <div class="discover-input-row">
         <input id="discoverUrl" type="url" placeholder="https://example.com/" autocomplete="url" />
-        <button id="runDiscoveryBtn" type="button" class="primary">解析</button>
+        <button id="runDiscoveryBtn" type="button" class="primary">探す</button>
       </div>
       <div id="discoverStatus" class="status-line"></div>
       <div id="discoverResults" class="discover-results"></div>
@@ -396,6 +396,6 @@
     </div>
   </dialog>
 
-  <script src="./vendor/hls-1.6.13.min.js"></script><script src="./features.js?v=1.8.1"></script><script src="./content-engine.js?v=1.8.1"></script><script src="./app.js?v=1.8.1-save2x"></script>
+  <script src="./vendor/hls-1.6.13.min.js"></script><script src="./features.js?v=1.8.1"></script><script src="./content-engine.js?v=1.8.1"></script><script src="./app.js?v=1.8.1-discover1"></script>
 </body>
 </html>
