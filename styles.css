@@ -660,3 +660,6 @@ main,.view,.channel-list{max-width:100%;min-width:0}
   padding:8px 10px;overflow-wrap:anywhere
 }
 .video-error-panel{max-height:60%;overflow:auto;-webkit-overflow-scrolling:touch}
+
+.video-play-zone{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:pan-y}
+.video-play-zone.holding-speed::after{content:"2倍速";position:absolute;top:12%;left:50%;transform:translateX(-50%);padding:6px 12px;border-radius:16px;background:#171717cf;color:#fff;font-weight:700;pointer-events:none}
