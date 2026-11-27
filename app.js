@@ -1187,7 +1187,7 @@ function openBrowserImportSetup(target=''){
   $('#browserImportTarget').value=browserImportTarget;
   const code=buildBrowserImportBookmarklet();
   $('#bookmarkletCode').value=code;
-  $('#browserImportStatus').textContent='Safari取り込み v28（最大4ページの候補取得・MP4優先・最大40件詳細確認）。実行するとページ上に開始表示が出ます。Safari側のブックマーク「MyMelter取込」はv26へ1回更新してください。同じサイトの動画詳細ページを最大12件まで確認し、動画URLを取得できた分だけ取り込みます。取得できない項目は元ページへのリンクを保持します。';
+  $('#browserImportStatus').textContent='Safari取り込み v28。「MyMelter取込」を登録済みなら、対象ページを開いてそのブックマークを実行してください。';
   $('#browserImportDialog').showModal();
 }
 async function copyBrowserImportBookmarklet(){
@@ -1207,6 +1207,10 @@ function decodeBrowserImportPayload(encoded){
 }
 function canonicalBrowserSourceUrl(url){
   const normalized=normalizeUrl(url);if(!normalized)return '';
+  const page=new URL(normalized);
+  if(domainOf(normalized)==='twikeep.com'&&page.pathname==='/ranking'&&page.searchParams.has('metric')&&page.searchParams.has('range')&&[...page.searchParams].length===2){
+    page.searchParams.sort();return page.href;
+  }
   const adapter=siteAdapterFor(normalized);return adapter?.canonical?.(normalized)||normalized;
 }
 function consumeBrowserImportHash(hash=location.hash){
