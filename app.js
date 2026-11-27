@@ -1,4 +1,5 @@
 const APP_VERSION = '1.8.1';
+const APP_BUILD = '1.8.1-media1';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -2159,6 +2160,11 @@ function feedUnavailableMessage(v,kind='missing'){
   return '動画の再生に失敗しました。配信元の状態を確認してください。';
 }
 function videoFailureInfo(v,kind=''){
+  const item=activeFeedItems[Number(v?.dataset?.feedVideo)];
+  const channel=state.channels.find(c=>c.id===item?.channelId);
+  let importHost='不明';
+  try{importHost=new URL(channel?.browserSourceUrl||channel?.url||activeChannel?.browserSourceUrl||activeChannel?.url).hostname;}catch{}
+  const stage=kind==='timeout'?'読み込みタイムアウト':v?._hlsFailure?'HLS読み込み':v?.error?.code===3?'デコード':v?.readyState>=1?'再生中':'メタデータ取得前';
   const source=v?.dataset?.expectedSrc||v?.dataset?.directSrc||'';
   let host='不明',format='不明';
   try{
@@ -2167,12 +2173,12 @@ function videoFailureInfo(v,kind=''){
   }catch{}
   const code=Math.max(0,Math.min(4,Number(v?.error?.code)||0));
   const route=String(v?.dataset?.currentRoute||'unknown').replace(/[^a-z-]/ig,'').slice(0,20)||'unknown';
-  return {host,format,route,code,ready:Math.max(0,Math.min(4,Number(v?.readyState)||0)),network:Math.max(0,Math.min(3,Number(v?.networkState)||0)),kind};
+  return {host,format,route,code,importHost,stage,http:v?._hlsFailure?.http||'不明',hls:v?._hlsFailure?.type||'',ready:Math.max(0,Math.min(4,Number(v?.readyState)||0)),network:Math.max(0,Math.min(3,Number(v?.networkState)||0)),kind};
 }
 function videoFailureSummary(info){
-  return '配信元:'+info.host+' · 形式:'+info.format+' · 経路:'+info.route+' · MediaError:'+info.code+' · ready:'+info.ready+' · network:'+info.network;
+  return 'ビルド:'+APP_BUILD+' · 取り込み元:'+info.importHost+' · 失敗段階:'+info.stage+' · HTTP:'+info.http+(info.hls?' · HLS:'+info.hls:'')+' · 配信元:'+info.host+' · 形式:'+info.format+' · 経路:'+info.route+' · MediaError:'+info.code+' · ready:'+info.ready+' · network:'+info.network;
 }
-function markFeedUnavailable(slide,v,message=''){
+function markFeedUnavailable(slide,v,message='',kind='playback'){
   if(!slide)return;
   if(v){
     v.dataset.shouldPlay='0';
@@ -2185,7 +2191,7 @@ function markFeedUnavailable(slide,v,message=''){
   slide.classList.add('video-load-error','video-source-missing');
   const label=slide.querySelector('[data-feed-error-text]');
   if(label)label.textContent=message||feedUnavailableMessage(v);
-  const data=videoFailureSummary(videoFailureInfo(v,'playback'));
+  const data=videoFailureSummary(videoFailureInfo(v,kind));
   const detail=slide.querySelector('[data-feed-error-detail]');
   if(detail)detail.textContent=data;
   slide.dataset.failureSummary=data;
@@ -2295,7 +2301,7 @@ function startFeedPlaybackWatchdog(){
       }
       if(sourceAge>=16000){
         if(tryFeedFallback(slide,v))return;
-        markFeedUnavailable(slide,v,feedUnavailableMessage(v,'timeout'));
+        markFeedUnavailable(slide,v,feedUnavailableMessage(v,'timeout'),'timeout');
       }
       return;
     }
@@ -2342,7 +2348,7 @@ function startFeedPlaybackWatchdog(){
       }
     }
     if(stage>=4){
-      markFeedUnavailable(slide,v,feedUnavailableMessage(v,'timeout'));
+      markFeedUnavailable(slide,v,feedUnavailableMessage(v,'timeout'),'timeout');
     }
   },500);
 }
@@ -2390,6 +2396,7 @@ function loadFeedSource(v,src,route,stateName='active'){
   v.dataset.feedState=stateName;
   v.dataset.currentRoute=route;
   v.dataset.expectedSrc=src;
+  v._hlsFailure=null;
   v._sourceStartedAt=Date.now();
   if(v._watchRecoverStage==null||Number(v._watchRecoverStage)===0)resetFeedProgressWatch(v,true);
   else resetFeedProgressWatch(v,false);
@@ -2399,7 +2406,10 @@ function loadFeedSource(v,src,route,stateName='active'){
   if(isHls(src)&&window.Hls?.isSupported()){
     v._hls?.destroy();const h=new Hls({maxBufferLength:30,backBufferLength:15,xhrSetup:(xhr,url)=>{if(route==='proxy'){const proxy=mediaProxyUrl(url);if(proxy)xhr.open('GET',proxy,true);}}});v._hls=h;
     h.on(Hls.Events.MANIFEST_PARSED,()=>{if(v._hls!==h)return;const target=v.dataset.qualityTarget;h.currentLevel=target?h.levels.findIndex(l=>l.url.includes(target)):-1;if(stateName==='active'&&v.dataset.shouldPlay==='1')v.play().catch(()=>{});});
-    h.on(Hls.Events.ERROR,(_,data)=>{if(data.fatal&&v._hls===h)v.dispatchEvent(new Event('error'));});h.loadSource(src);h.attachMedia(v);return;
+    h.on(Hls.Events.ERROR,(_,data)=>{if(!data.fatal||v._hls!==h)return;
+      const status=Number(data.response?.code);
+      v._hlsFailure={http:Number.isInteger(status)&&status>=100&&status<=599?status:null,type:Object.values(Hls.ErrorTypes).includes(data.type)?data.type:'unknown'};
+      v.dispatchEvent(new Event('error'));});h.loadSource(src);h.attachMedia(v);return;
   }
   if(v._hls){try{v._hls.destroy();}catch{}v._hls=null;}
   v.src=src;

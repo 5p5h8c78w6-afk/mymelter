@@ -28,8 +28,9 @@ jobs:
           node-version: '22'
       - name: Install browser test dependencies
         run: npm install --no-audit --no-fund --fetch-retries=1 --fetch-timeout=30000
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+        env:
+          MYMELTER_BROWSER_CHANNEL: chrome
 
   package:
     needs: [unit, browser]
