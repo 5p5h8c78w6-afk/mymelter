@@ -47,7 +47,7 @@ try{
   await discoveryPage.reload();
   await discoveryPage.locator('[data-open-channel]:visible').filter({hasText:'TwiKeep 再生数・24時間'}).click();
   assert.equal(await discoveryPage.locator('#browserImportTarget').inputValue(),ranking);
-  await discoveryPage.goto(appUrlForDiscovery()+importHash(ranking,'Live ranking'));
+  await discoveryPage.goto(appUrlForDiscovery()+importHash(root+'ranking?range=24h&metric=views','Live ranking'));
   await discoveryPage.locator('[data-video-gallery-open="0"]').waitFor();
   assert.deepEqual(await discoveryPage.evaluate(url=>state.channels.filter(c=>c.url===url).map(c=>[c.id,c.source,c.snapshotItems.length]),ranking),[[prior,'browser',1]]);
   function appUrlForDiscovery(){return 'http://127.0.0.1:'+server.address().port+'/';}
