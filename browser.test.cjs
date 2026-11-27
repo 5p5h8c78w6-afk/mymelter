@@ -89,8 +89,13 @@ const quickImportV28=await page.evaluate(async()=>{
  const success=await run(fixture,'https://www.twi-dl.net/hozon.php');
  const blocked=await run(fixture,'https://www.twi-dl.net/hozon.php','blocked');
  const none=await run('<html><body><main><h1>リンクなし</h1></main></body></html>','https://empty.example/');
- return {size:code.length,success,blocked,none};
+ const multi=await run('<video poster="/a.jpg"><source src="/bad.mp4"><source src="/good.webm"></video><video src="/other.mp4"></video>','https://www.twikeep.com/');
+ return {size:code.length,success,blocked,none,multi};
 });
+assert.deepEqual(quickImportV28.multi.payload.i.map(x=>[x.m,x.m2||'']),[
+ ['https://www.twikeep.com/bad.mp4','https://www.twikeep.com/good.webm'],
+ ['https://www.twikeep.com/other.mp4','']
+]);
 assert.ok(quickImportV28.size<14000);
 assert.equal(quickImportV28.success.early,true);
 assert.equal(quickImportV28.success.alerted,'');
