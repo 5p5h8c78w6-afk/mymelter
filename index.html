@@ -90,6 +90,8 @@
         <span><strong>チャンネルを追加</strong><small>URLを貼ると、追加候補を自動解析します</small></span>
       </button>
 
+      <button id="receiveSafari" class="secondary" type="button">Safariから受け取る</button>
+
       <section class="discover-panel" aria-labelledby="discoverRankingTitle">
         <div class="section-title-row ranking-head">
           <div><p class="eyebrow">DISCOVER</p><h2 id="discoverRankingTitle">発見</h2></div>
@@ -259,6 +261,15 @@
     </form>
   </dialog>
 
+  <dialog id="transferDialog" class="sheet-dialog">
+    <div class="sheet"><h2 id="transferTitle"></h2><p id="transferHelp"></p>
+      <label class="field"><span>取り込みデータ</span><textarea id="transferText" rows="3" spellcheck="false"></textarea></label>
+      <div class="button-row"><button class="primary" id="transferAction" type="button"></button>
+      <button class="secondary" id="transferLocal" type="button">このブラウザで受け取る</button>
+      <button class="secondary" id="transferClose" type="button">閉じる</button></div>
+      <p id="transferStatus" role="status"></p>
+    </div>
+  </dialog>
   <dialog id="browserImportDialog" class="sheet-dialog">
     <div class="sheet browser-import-sheet">
       <div class="sheet-handle"></div>
@@ -271,7 +282,7 @@
       <div class="browser-import-steps">
         <div><b>1</b><span>下の「取込コードをコピー」を押す</span></div>
         <div><b>2</b><span>Safariで任意ページをブックマークし、名前を「MyMelter取込」、URLをコピーしたコードへ置き換える</span></div>
-        <div><b>3</b><span>対象ページを開き、そのブックマークを実行するとMyMelterへ戻ります</span></div>
+        <div><b>3</b><span>対象ページを開き、そのブックマークを実行。受け渡し画面が開いたらコピーし、ホーム画面のMyMelterで「Safariから受け取る」を押します</span></div>
       </div>
       <div class="button-row">
         <button id="copyBookmarkletBtn" type="button" class="primary">取込コードをコピー</button>
@@ -384,6 +395,6 @@
     </div>
   </dialog>
 
-  <script src="./vendor/hls-1.6.13.min.js"></script><script src="./features.js?v=1.8.1"></script><script src="./content-engine.js?v=1.8.1"></script><script src="./app.js?v=1.8.1"></script>
+  <script src="./vendor/hls-1.6.13.min.js"></script><script src="./features.js?v=1.8.1"></script><script src="./content-engine.js?v=1.8.1"></script><script src="./app.js?v=1.8.1-handoff2"></script>
 </body>
 </html>

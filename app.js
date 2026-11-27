@@ -1207,10 +1207,9 @@ function canonicalBrowserSourceUrl(url){
   const normalized=normalizeUrl(url);if(!normalized)return '';
   const adapter=siteAdapterFor(normalized);return adapter?.canonical?.(normalized)||normalized;
 }
-function consumeBrowserImportHash(){
-  if(!location.hash.startsWith('#mmimport=')) return null;
-  const raw=location.hash.slice('#mmimport='.length);
-  history.replaceState(null,'',location.pathname+location.search);
+function consumeBrowserImportHash(hash=location.hash){
+  if(!hash.startsWith('#mmimport='))return null;
+  const raw=hash.slice('#mmimport='.length);
   try{
     const payload=decodeBrowserImportPayload(raw);
     const rawSource=normalizeUrl(payload?.s||''); if(!rawSource) throw new Error('取込元URLが不正です');
@@ -1259,7 +1258,7 @@ function consumeBrowserImportHash(){
     if(channel){
       const primary=items.length?items:(channel.snapshotItems||[]);
       const deep=deepItems.length?deepItems:(channel.deepDiveItems||[]);
-      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.categoryTabs=categoryTabs.length?categoryTabs:(channel.categoryTabs||[]); channel.categorySnapshots=MyMelterContentEngine.normalizeCategorySnapshots(Object.keys(categorySnapshots).length?{...(channel.categorySnapshots||{}),...categorySnapshots}:(channel.categorySnapshots||{})); channel.snapshotItems=MyMelterContentEngine.mergeItems((channel.snapshotItems||[]).filter(old=>primary.some(item=>item.url===old.url)),primary); channel.deepDiveItems=MyMelterContentEngine.mergeItems(deep); channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.updatedAt=Date.now();
+      channel.name=title; channel.url=source; channel.browserSourceUrl=source; channel.categoryTabs=categoryTabs.length?categoryTabs:(channel.categoryTabs||[]); channel.categorySnapshots=MyMelterContentEngine.normalizeCategorySnapshots(Object.keys(categorySnapshots).length?{...(channel.categorySnapshots||{}),...categorySnapshots}:(channel.categorySnapshots||{})); channel.snapshotItems=MyMelterContentEngine.mergeItems(primary,(channel.snapshotItems||[]).filter(old=>primary.some(item=>item.url===old.url&&(!item.videoUrl||item.videoUrl===old.videoUrl)))); channel.deepDiveItems=MyMelterContentEngine.mergeItems(deep); channel.relatedSites=relatedSites; channel.relatedSitesVersion=Number(payload?.v||0); channel.updatedAt=Date.now();
       const unified=MyMelterContentEngine.channelItems(channel);channel.itemCount=unified.length;if(!channel.typeLocked)channel.type=MyMelterContentEngine.profile(unified).mode;
       unified.forEach(x=>{x.channelId=channel.id;x.channelName=channel.name;});
       rememberItems(unified);
@@ -2872,17 +2871,58 @@ document.addEventListener('pointercancel',()=>{
 
 // Initial launch
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('SW',e));}
-const importedBrowserResult=consumeBrowserImportHash();
+
 renderAll();
 probeWorkerDownloadCapability(true);
 if(state.channels.length){try{saveState(false);}catch(e){console.warn('ジャンル補完の保存に失敗',e);}}
-if(importedBrowserResult?.kind==='web-search'){
+function finishTransfer(hash){
+  const importedBrowserResult=consumeBrowserImportHash(hash);
+  if(!importedBrowserResult)return false;
+  if(location.hash===hash)history.replaceState(null,'',location.pathname+location.search);
+  renderAll();
+  if(importedBrowserResult?.kind==='web-search'){
   setTimeout(()=>{
     const ch=importedBrowserResult.channel;$('#discoverUrl').value=ch?.url||'';renderDiscoveryResults(importedBrowserResult.candidates||[]);
     $('#discoverStatus').textContent=(importedBrowserResult.candidates?.length||0)?(importedBrowserResult.candidates.length+'件のWeb候補。内容を確認して追加してください。'):'Web検索から追加できる候補がありませんでした。';
     if(!$('#discoverDialog').open)$('#discoverDialog').showModal();
   },0);
 }else if(importedBrowserResult){setTimeout(()=>openChannel(importedBrowserResult),0);}
+  return true;
+}
+function showTransfer(outgoing){
+  const dialog=$('#transferDialog'),field=$('#transferText'),status=$('#transferStatus');
+  $('#transferTitle').textContent=outgoing?'ホーム画面のMyMelterへ渡す':'Safariから受け取る';
+  $('#transferHelp').textContent=outgoing?'コピー後、ホーム画面のMyMelterを開いて「Safariから受け取る」を押してください。':'コピーした取り込みデータを読み込みます。手動で貼り付けることもできます。';
+  field.value=outgoing?location.hash:'';field.readOnly=outgoing;status.textContent='';
+  $('#transferLocal').hidden=!outgoing;
+  $('#transferLocal').onclick=()=>{if(finishTransfer(field.value))dialog.close();};
+  const action=$('#transferAction');
+  action.textContent=outgoing?'アプリに渡すデータをコピー':'取り込む';
+  action.onclick=async()=>{
+    if(outgoing){
+      try{await navigator.clipboard.writeText(field.value);status.textContent='コピーしました。ホーム画面のMyMelterを開いてください。';}
+      catch{field.focus();field.select();status.textContent='選択したデータを長押ししてコピーしてください。';}
+      return;
+    }
+    let value=field.value.trim();
+    if(!value){try{value=(await navigator.clipboard.readText()).trim();}catch{}}
+    if(!value.startsWith('#mmimport=')){status.textContent='Safariでコピーした取り込みデータをこの欄に貼り付けてください。';field.focus();return;}
+    field.value=value;
+    if(finishTransfer(value))dialog.close();else status.textContent='データを取り込めませんでした。Safariでコピーした全文を確認してください。';
+  };
+  $('#transferClose').onclick=()=>dialog.close();
+  if(!dialog.open)dialog.showModal();
+}
+function receiveImportNavigation(){
+  if(!location.hash.startsWith('#mmimport='))return;
+  const appleMobile=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(appleMobile&&!navigator.standalone&&!matchMedia('(display-mode: standalone)').matches)showTransfer(true);
+  else finishTransfer(location.hash);
+}
+$('#receiveSafari').onclick=()=>showTransfer(false);
+window.addEventListener('hashchange',receiveImportNavigation);
+receiveImportNavigation();
+
 
 function similarCandidateSignals(name='',url='',context='',rel=''){
   const text=`${name} ${url} ${context} ${rel}`,label=String(name||'').trim(),host=domainOf(url).toLowerCase();
