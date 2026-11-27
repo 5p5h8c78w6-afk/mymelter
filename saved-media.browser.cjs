@@ -17,7 +17,7 @@ module.exports = async function testSavedMedia(browser, appUrl) {
     const start = range ? Number(range[1]) : 0;
     const end = Math.min(range && range[2] ? Number(range[2]) : clip.length - 1, clip.length - 1);
     if (start > end) { res.writeHead(416).end(); return; }
-    const headers = {'Content-Type':'video/mp4', 'Accept-Ranges':'bytes', 'Content-Length':end-start+1};
+    const headers = {'Access-Control-Allow-Origin':'*', 'Content-Type':'video/mp4', 'Accept-Ranges':'bytes', 'Content-Length':end-start+1};
     if (range) headers['Content-Range'] = 'bytes '+start+'-'+end+'/'+clip.length;
     res.writeHead(range ? 206 : 200, headers).end(clip.subarray(start,end+1));
   });
@@ -40,6 +40,27 @@ module.exports = async function testSavedMedia(browser, appUrl) {
       return video && video.duration>0 && video.currentTime>.35 && video.getVideoPlaybackQuality().totalVideoFrames>1;
     },index,{timeout:10000});
     await progressing(0);
+    const zone=page.locator('.is-current [data-feed-toggle]');
+    const box=await zone.boundingBox();
+    await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+    await page.mouse.down();
+    const speed=()=>page.locator('.is-current video[data-feed-video]').evaluate(v=>[v.playbackRate,v.paused]);
+    await page.waitForFunction(()=>document.querySelector('.is-current video[data-feed-video]').playbackRate===2);
+    await page.mouse.up();
+    assert.deepEqual(await speed(),[1,false]);
+    await page.locator('.is-current [data-feed-quick-save]').click({force:true});
+    await page.waitForFunction(()=>!document.querySelector('[data-media-share]')?.disabled && !!document.querySelector('#mediaSaveDialog[open]'));
+    await page.evaluate(()=>{
+      Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>true});
+      Object.defineProperty(navigator,'share',{configurable:true,value:async({files})=>{
+        const file=files[0];window.sharedClip={mime:file.type,bytes:Array.from(new Uint8Array(await file.arrayBuffer()))};
+      }});
+    });
+    await page.locator('[data-media-share]').click();
+    await page.waitForFunction(()=>!!window.sharedClip);
+    const shared=await page.evaluate(()=>window.sharedClip);
+    assert.equal(shared.mime,'video/mp4');
+    assert.deepEqual(Buffer.from(shared.bytes),clip);
     const move = index => page.locator('[data-feed-index="'+index+'"]').evaluate(slide => {
       document.querySelector('#videoFeed').scrollTo({top:slide.offsetTop,behavior:'instant'});
     });

@@ -1,5 +1,5 @@
 const APP_VERSION = '1.8.1';
-const APP_BUILD = '1.8.1-media1';
+const APP_BUILD = '1.8.1-save2x';
 const GENRES=['動画','画像','ニュース','ブログ','SNS','エンタメ','スポーツ','ゲーム','技術','ショッピング','その他'];
 function inferGenre(c){
   if(GENRES.includes(c.genre))return c.genre;
@@ -1634,8 +1634,10 @@ async function openVideoSaveGate(item){
   d._item=item;status.textContent='Worker 1.3対応を確認中…';start.disabled=true;
   if(!d.open)d.showModal();
   const cap=await probeWorkerDownloadCapability(!workerCapability.checked);
+  if(!d.open||d._item!==item)return;
+  if(!cap.download){d.close();await prepareVideoFile(item);return;}
   status.textContent=safeSaveStatusMessage(cap);
-  start.disabled=!cap.download;
+  start.disabled=false;
 }
 function startVerifiedVideoDownload(item){
   pauseFeedForExternalAction();
@@ -1676,11 +1678,14 @@ function ensureMediaSaveDialog(){
   d.innerHTML='<div class="sheet media-save-sheet"><div class="sheet-handle"></div><div class="sheet-head"><div><p class="eyebrow">DEVICE SAVE</p><h2>端末へ保存</h2></div><button type="button" class="round-btn" data-media-save-close>×</button></div><div class="media-save-preview" data-media-save-preview></div><p class="sheet-lead" data-media-save-status>準備しています…</p><div class="button-row"><button type="button" class="primary" data-media-share disabled>共有して保存</button><button type="button" class="secondary" data-media-save-close>閉じる</button></div></div>';
   document.body.appendChild(d);
   d.querySelectorAll('[data-media-save-close]').forEach(b=>b.onclick=closeMediaSaveDialog);
+  d.addEventListener('cancel',event=>{event.preventDefault();closeMediaSaveDialog();});
   d.querySelector('[data-media-share]').onclick=sharePreparedMedia;
   return d;
 }
 function closeMediaSaveDialog(){
-  const d=document.getElementById('mediaSaveDialog'); if(d?.open)d.close();
+  const d=document.getElementById('mediaSaveDialog'); if(d)d._imageRequest=null;
+  if(d?._videoSave){d._videoSave.abort();d._videoSave=null;}
+  if(d?.open)d.close();
   if(pendingMediaShare?.objectUrl)URL.revokeObjectURL(pendingMediaShare.objectUrl);
   pendingMediaShare=null;
 }
@@ -1698,6 +1703,43 @@ async function sharePreparedMedia(){
     status.textContent='ダウンロードを開始しました。';
   }else status.textContent='この端末ではファイル共有を利用できません。';
 }
+async function prepareVideoFile(item){
+  closeMediaSaveDialog();
+  const d=ensureMediaSaveDialog(),status=d.querySelector('[data-media-save-status]'),share=d.querySelector('[data-media-share]');
+  const controller=new AbortController();d._videoSave=controller;
+  d.querySelector('[data-media-save-preview]').replaceChildren();
+  share.disabled=true;status.textContent='動画を取得中…';d.showModal();
+  const maxBytes=300*1024*1024;
+  let timer;
+  const resetTimeout=()=>{clearTimeout(timer);timer=setTimeout(()=>controller.abort('timeout'),60000);};
+  try{
+    resetTimeout();
+    const r=await fetch(item.videoUrl,{credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal});
+    if(r.status!==200)throw Error('HTTP '+r.status+'：動画全体を取得できませんでした。');
+    const mime=(r.headers.get('Content-Type')||'').split(';')[0].trim().toLowerCase();
+    const ext=mediaFileExtension(item.videoUrl,mime);
+    const type=mime.startsWith('video/')?mime:({'mp4':'video/mp4',m4v:'video/mp4',mov:'video/quicktime',webm:'video/webm'})[ext];
+    if(!type||(mime&&!mime.startsWith('video/')&&mime!=='application/octet-stream'&&mime!=='binary/octet-stream'))throw Error('配信元が動画ファイルを返しませんでした。');
+    const length=Number(r.headers.get('Content-Length'))||0;
+    if(length>maxBytes)throw Error('動画が300MBの保存上限を超えています。');
+    const reader=r.body.getReader(),chunks=[];let size=0;
+    try{
+      while(true){
+        const {done,value}=await reader.read();if(done)break;
+        size+=value.byteLength;if(size>maxBytes)throw Error('動画が300MBの保存上限を超えています。');
+        chunks.push(value);resetTimeout();
+        status.textContent='動画を取得中 '+(size/1048576).toFixed(1)+' MB'+(length?' / '+(length/1048576).toFixed(1)+' MB':'');
+      }
+    }finally{reader.releaseLock();}
+    if(!size)throw Error('動画が空です。');
+    if(controller.signal.aborted||d._videoSave!==controller||!d.open)return;
+    const file=new File(chunks,[deviceSaveFilename(item,item.videoUrl).replace(/\.[^.]+$/,''),ext].join('.'),{type});
+    pendingMediaShare={file,objectUrl:URL.createObjectURL(file),title:item.title||'MyMelter'};
+    share.disabled=false;status.textContent='準備完了。「共有して保存」から「ビデオを保存」または「ファイルに保存」を選んでください。';
+  }catch(e){
+    if(d._videoSave===controller&&d.open)status.textContent=controller.signal.reason==='timeout'?'動画の受信が止まりました。閉じて再試行してください。':e instanceof TypeError?'配信元から動画ファイルを取得できませんでした。通信と配信元のアクセス制限を確認してください。':String(e.message||'動画を取得できませんでした。');
+  }finally{clearTimeout(timer);controller.abort();if(d._videoSave===controller)d._videoSave=null;}
+}
 async function prepareDeviceSave(item){
   const target=item?.videoUrl||item?.image||item?.url; if(!target)return;
   if(item?.videoUrl&&isHls(item.videoUrl)){await openQualityPicker(item,null,true);return;}
@@ -1707,18 +1749,24 @@ async function prepareDeviceSave(item){
   }
   if(item?.videoUrl){
     pauseFeedForExternalAction();
-    await openQualityPicker(item,null,true);
+    if(state.settings.shortcutEnabled||state.settings.proxyUrl)await openQualityPicker(item,null,true);
+    else await prepareVideoFile(item);
     return;
   }
+  closeMediaSaveDialog();
+  const request={};
   const d=ensureMediaSaveDialog(),status=d.querySelector('[data-media-save-status]'),share=d.querySelector('[data-media-share]'),preview=d.querySelector('[data-media-save-preview]');
+  d._imageRequest=request;
   status.textContent='画像を準備中…';share.disabled=true;preview.innerHTML=item?.image?`<img ${imageSourceAttrs(item.image)} alt="">`:'<div class="media-save-placeholder">画像を準備しています</div>';
   if(!d.open)d.showModal();
   try{
     const blob=await fetchMediaBlob(target,15000),ext=mediaFileExtension(target,blob.type),name=`MyMelter_${Date.now()}.${ext}`,file=new File([blob],name,{type:blob.type||'application/octet-stream'});
+    if(d._imageRequest!==request||!d.open)return;
     const objectUrl=URL.createObjectURL(blob);
     pendingMediaShare={file,objectUrl,title:item.title||'MyMelter'};
     status.textContent='準備完了。「共有して保存」を押してください。';share.disabled=false;
   }catch(e){
+    if(d._imageRequest!==request||!d.open)return;
     console.warn('image save prepare failed',e);status.textContent='画像の準備に失敗しました。再試行してください。';share.disabled=true;
   }
 }
@@ -2353,7 +2401,44 @@ function startFeedPlaybackWatchdog(){
   },500);
 }
 
+let speedHold=null,holdClickTarget=null;
+function endSpeedHold(){
+  if(!speedHold)return;
+  const {timer,video,active,rate,button}=speedHold;
+  clearTimeout(timer);
+  if(active){video.playbackRate=rate;button.classList.remove('holding-speed');}
+  speedHold=null;
+}
+document.addEventListener('pointerdown',e=>{
+  endSpeedHold();holdClickTarget=null;
+  const button=e.target.closest?.('.is-current [data-feed-toggle]');
+  const video=button?.closest('.video-slide')?.querySelector('video[data-feed-video]');
+  if(!button||!video||video.paused||!e.isPrimary||e.button!==0)return;
+  const hold={id:e.pointerId,x:e.clientX,y:e.clientY,button,video,active:false,rate:video.playbackRate};
+  speedHold=hold;
+  hold.timer=setTimeout(()=>{
+    if(speedHold!==hold||video.paused||!button.closest('.is-current'))return;
+    hold.rate=video.playbackRate;video.playbackRate=2;hold.active=true;
+    holdClickTarget=button;button.classList.add('holding-speed');
+  },450);
+},true);
+document.addEventListener('pointermove',e=>{
+  if(speedHold?.id===e.pointerId&&Math.hypot(e.clientX-speedHold.x,e.clientY-speedHold.y)>12)endSpeedHold();
+},true);
+for(const event of ['pointerup','pointercancel','lostpointercapture']){
+  document.addEventListener(event,e=>{if(speedHold?.id===e.pointerId)endSpeedHold();},true);
+}
+document.addEventListener('click',e=>{
+  if(holdClickTarget&&e.detail!==0&&holdClickTarget.contains(e.target)){
+    holdClickTarget=null;e.preventDefault();e.stopImmediatePropagation();
+  }
+},true);
+document.addEventListener('contextmenu',e=>{if(e.target.closest?.('[data-feed-toggle]'))e.preventDefault();});
+window.addEventListener('blur',endSpeedHold);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)endSpeedHold();});
+document.addEventListener('pause',e=>{if(speedHold?.video===e.target)endSpeedHold();},true);
 function closeVideoFeed(){
+  endSpeedHold();
   feedActivationSerial++;clearFeedPlaybackWatchdog();clearFeedControlsTimer();setFeedControlsHidden(false);
   document.querySelectorAll('#videoFeed video').forEach(v=>releaseFeedVideoElement(v,true));
   activeFeedItems=[];feedCurrentIndex=0;feedRoutePrefs=new Map();feedHotOrder=[];
@@ -2463,6 +2548,7 @@ function activateFeedIndex(index,force=false,userInitiated=false){
     const current=feedSlide(i)?.querySelector('video');
     if(current?.getAttribute('src')&&current.dataset.feedState==='active')return;
   }
+  endSpeedHold();
   feedActivationSerial++;const activationId=feedActivationSerial;
   feedCurrentIndex=i;showFeedControls(true);
   feedHotOrder=[i-1,i,i+1].filter(x=>x>=0&&x<slides.length);
@@ -2714,7 +2800,7 @@ document.addEventListener('click',async e=>{
   const feedSlide=e.target.closest('[data-feed-index]');
   const feedVideo=e.target.closest('video[data-feed-video]'); if(feedVideo){if(feedVideo.paused){feedVideo.muted=!feedSoundOn;feedVideo.play().catch(()=>{});}else feedVideo.pause();return;}
   const feedSound=e.target.closest('[data-feed-sound]'); if(feedSound){setFeedSound(!feedSoundOn);const slide=feedSound.closest('.video-slide');const v=slide?.querySelector('video');if(v){v.muted=!feedSoundOn;if(v.dataset.shouldPlay==='1')kickFeedPlayback(v,slide,'再生を継続中…');}return;}
-  const feedQuick=e.target.closest('[data-feed-quick-save]'); if(feedQuick&&feedSlide){await prepareDeviceSave(activeFeedItems[Number(feedQuick.dataset.feedQuickSave)]);return;}
+  const feedQuick=e.target.closest('[data-feed-quick-save]'); if(feedQuick&&feedSlide){await prepareDeviceSave(feedSaveItem(Number(feedQuick.dataset.feedQuickSave)));return;}
   const feedSave=e.target.closest('[data-feed-save]'); if(feedSave&&feedSlide){toggleSavedItem(activeFeedItems[Number(feedSave.dataset.feedSave)],feedSave);return;}
   const longPlay=e.target.closest('[data-long-system-play]'); if(longPlay){openSystemLongVideo(Number(longPlay.dataset.longSystemPlay));return;}
   const feedToggle=e.target.closest('[data-feed-toggle]'); if(feedToggle){
@@ -2851,6 +2937,10 @@ document.addEventListener('pointercancel',e=>{
   const scrub=document.querySelector('[data-feed-scrub][data-dragging="1"]');if(scrub)finishFeedScrub(scrub,e);
 },{capture:true});
 
+function feedSaveItem(index){
+  const item=activeFeedItems[index],video=feedSlide(index)?.querySelector('video[data-feed-video]');
+  return item?.alternateVideoUrl&&video?.dataset.currentRoute==='alternate'?{...item,videoUrl:item.alternateVideoUrl}:item;
+}
 function actionablePressButton(target){
   return target?.closest?.('[data-active-save],[data-active-quick-save],[data-feed-save],[data-feed-quick-save]')||null;
 }
@@ -2859,7 +2949,7 @@ async function runPressAction(button){
   if(button.hasAttribute('data-active-save')){toggleSavedItem(activeItems[Number(button.dataset.activeSave)],button);return;}
   if(button.hasAttribute('data-active-quick-save')){await prepareDeviceSave(activeItems[Number(button.dataset.activeQuickSave)]);return;}
   if(button.hasAttribute('data-feed-save')){toggleSavedItem(activeFeedItems[Number(button.dataset.feedSave)],button);return;}
-  if(button.hasAttribute('data-feed-quick-save')){await prepareDeviceSave(activeFeedItems[Number(button.dataset.feedQuickSave)]);return;}
+  if(button.hasAttribute('data-feed-quick-save')){await prepareDeviceSave(feedSaveItem(Number(button.dataset.feedQuickSave)));return;}
 }
 document.addEventListener('pointerdown',e=>{
   const button=actionablePressButton(e.target);if(!button)return;
