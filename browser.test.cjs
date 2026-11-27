@@ -32,6 +32,26 @@ try{
   assert.equal(await discoveryPage.locator('#browserImportDialog').isVisible(),true);
   await discoveryPage.reload();
   assert.equal(await discoveryPage.locator('[data-open-channel]:visible').count(),1);
+  const importHash=(s,n)=>'#mmimport='+encodeURIComponent(Buffer.from(JSON.stringify({v:28,s,n,i:[{t:'clip',u:s,m:'https://video.example/test.mp4',y:'video'}]})).toString('base64'));
+  const root='https://www.twikeep.com/',ranking=root+'ranking?metric=views&range=24h';
+  await discoveryPage.goto(appUrlForDiscovery()+importHash(root,'TwiKeep'));
+  await discoveryPage.locator('[data-video-gallery-open="0"]').waitFor();
+  await discoveryPage.reload();
+  await discoveryPage.locator('#discoverBtn').click();
+  await discoveryPage.locator('#discoverUrl').fill(root);
+  await discoveryPage.locator('#discoverUrl').press('Enter');
+  const row=results.locator('article').filter({hasText:'TwiKeep 再生数・24時間'});
+  await row.locator('[data-add-candidate]').click();
+  assert.equal(await results.locator('article').filter({hasText:'Twi-DL'}).count(),1);
+  const prior=await discoveryPage.evaluate(url=>state.channels.find(c=>c.url===url).id,ranking);
+  await discoveryPage.reload();
+  await discoveryPage.locator('[data-open-channel]:visible').filter({hasText:'TwiKeep 再生数・24時間'}).click();
+  assert.equal(await discoveryPage.locator('#browserImportTarget').inputValue(),ranking);
+  await discoveryPage.goto(appUrlForDiscovery()+importHash(ranking,'Live ranking'));
+  await discoveryPage.locator('[data-video-gallery-open="0"]').waitFor();
+  assert.deepEqual(await discoveryPage.evaluate(url=>state.channels.filter(c=>c.url===url).map(c=>[c.id,c.source,c.snapshotItems.length]),ranking),[[prior,'browser',1]]);
+  function appUrlForDiscovery(){return 'http://127.0.0.1:'+server.address().port+'/';}
+
 }finally{await discoveryPage.close();}
 await page.addInitScript(()=>localStorage.setItem('mymelter-state-v2',JSON.stringify({channels:[{id:'a',name:'動画サイト',type:'video',url:'https://video.example/',createdAt:123,custom:'keep'},{id:'b',name:'技術ブログ',type:'article',url:'https://tech.example/',genre:'ブログ'}],saved:[{url:'https://saved.example/',title:'保存'}],settings:{proxyUrl:'',proxyKey:'keep-key'}})));
 await page.goto('http://127.0.0.1:'+server.address().port);await page.evaluate(()=>navigate('channels'));
